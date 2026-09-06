@@ -58,10 +58,10 @@ Schema: `{name}.{version}.{family}.bin`
 
 | Datei | Board |
 |-------|-------|
-| `io-control.1.3.2.esp32.bin` | ESP32 / D1 Mini |
-| `io-control.1.3.2.esp32s3.bin` | ESP32-S3 |
+| `io-control.1.3.3.esp32.bin` | ESP32 / D1 Mini |
+| `io-control.1.3.3.esp32s3.bin` | ESP32-S3 |
 
-> Hinweis: Die .bins sind **1.3.2**; der Sketch-Stand ist **1.3.3**.
+> Hinweis: Vorkompilierte Bins entsprechen Sketch-Stand **1.3.3**.
 
 ---
 

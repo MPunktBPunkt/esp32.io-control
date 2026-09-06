@@ -833,7 +833,7 @@ label{font-size:12px;color:#8b949e;white-space:nowrap}
 )css";
 
     // ── JAVASCRIPT ───────────────────────────────────────────────
-    static const char JS[] PROGMEM = R"js(
+    static const char JS[] PROGMEM = R"EOFJS(
 var MC=['#444','#2ecc71','#27ae60','#e74c3c','#e67e22','#9b59b6','#8e44ad',
         '#3498db','#2980b9','#1abc9c','#16a085','#17a589','#0e6655','#f39c12','#e91e8c'];
 var MN=['DISABLED','INPUT','INPUT_PU','OUTPUT','PWM','ADC','DAC',
@@ -957,13 +957,13 @@ var CX_S3L = 280, CX_S3R = 720;
 var VB_S3  = '0 0 1000 520';
 var VB_32  = '0 0 800 300';
 
-function py32(r){ return 18 + r*28; }
-function pyS3(r){ return 12 + r*23; }
+var py32 = function(r){ return 18 + r*28; }
+var pyS3 = function(r){ return 12 + r*23; }
 
 var PD = [];
 
 // Tab wechseln
-function showTab(id, el) {
+var showTab = function(id, el) {
   document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('pane-' + id).classList.add('active');
@@ -976,7 +976,7 @@ function showTab(id, el) {
 }
 
 // ── Board SVG ─────────────────────────────────────────────────
-function renderBoard() {
+var renderBoard = function() {
   var svg = document.getElementById('bsvg');
   svg.querySelectorAll('.dyn').forEach(e => e.remove());
   var pm = {}; PD.forEach(p => pm[p.gpio] = p);
@@ -1014,7 +1014,7 @@ function renderBoard() {
 }
 
 // ── ESP32 Board rendern (4 Spalten) ──────────────────────────
-function renderBoard32(svg, pm, ns) {
+var renderBoard32 = function(svg, pm, ns) {
   LY_ESP32.forEach(function(lp) {
     var pd  = pm[lp.g];
     var col = lp.sp || (pd ? MC[pd.mode] : '#444');
@@ -1026,7 +1026,7 @@ function renderBoard32(svg, pm, ns) {
 }
 
 // ── ESP32-S3 Board rendern (2 Spalten) ───────────────────────
-function renderBoardS3(svg, pm, ns) {
+var renderBoardS3 = function(svg, pm, ns) {
   LY_S3.forEach(function(lp) {
     var pd  = pm[lp.g];
     // RGB-LED bekommt Regenbogenfarbe
@@ -1044,7 +1044,7 @@ function renderBoardS3(svg, pm, ns) {
 }
 
 // ── Gemeinsame Pad-Erstellung ─────────────────────────────────
-function makePad(ns, lp, pd, col, x, y, cxMap, peMap, lxMap, pyFn) {
+var makePad = function(ns, lp, pd, col, x, y, cxMap, peMap, lxMap, pyFn) {
     var grp = document.createElementNS(ns, 'g');
     grp.classList.add('dyn');
     if (lp.g > 0 && !lp.sp) {
@@ -1098,7 +1098,7 @@ function makePad(ns, lp, pd, col, x, y, cxMap, peMap, lxMap, pyFn) {
 }
 
 // ── Helper: Wert + Aktion fuer eine Zeile ─────────────────────
-function rowVA(p) {
+var rowVA = function(p) {
   var vs = '—', vc = '', act = '';
   if (p.mode===1||p.mode===2||p.mode===3) { vs=p.value?'HIGH':'LOW'; vc=p.value?'vhi':'vlo'; }
   else if (p.mode===4)  { vs=p.pwmDuty+'/255 @ '+p.pwmFreq+'Hz'; vc='vadc'; }
@@ -1116,7 +1116,7 @@ function rowVA(p) {
 }
 
 // ── GPIO Tabelle: Rebuild (nur bei Tab-Wechsel) ────────────────
-function renderGpio() {
+var renderGpio = function() {
   var tb = document.getElementById('gtb');
   if (!PD.length) { tb.innerHTML='<tr><td colspan=5 style=color:#555;text-align:center>Lade...</td></tr>'; return; }
   var h = '';
@@ -1141,7 +1141,7 @@ function renderGpio() {
 }
 
 // ── Nur Wert+Aktion einer Zeile aktualisieren ─────────────────
-function updateOneRow(gpio) {
+var updateOneRow = function(gpio) {
   var p = PD.find(x => x.gpio === gpio);
   if (!p) return;
   var va = rowVA(p);
@@ -1152,7 +1152,7 @@ function updateOneRow(gpio) {
 }
 
 // ── Alle Werte aktualisieren (vom SSE-Event) ──────────────────
-function updateGpioValues() {
+var updateGpioValues = function() {
   PD.forEach(function(p) {
     var sel = document.querySelector('select[data-gpio="'+p.gpio+'"]');
     if (sel && document.activeElement===sel) return;
@@ -1167,7 +1167,7 @@ function updateGpioValues() {
 
 // ── SSE Verbindung ────────────────────────────────────────────
 var es;
-function connectSSE() {
+var connectSSE = function() {
   es = new EventSource('/api/events');
   es.addEventListener('pins', function(e) {
     PD = JSON.parse(e.data);
@@ -1186,7 +1186,7 @@ connectSSE();
 fetchStatus();  // Board-Typ sofort erkennen
 
 // ── Modus-Aenderung ───────────────────────────────────────────
-function pinModeChange(sel) {
+var pinModeChange = function(sel) {
   var gpio = parseInt(sel.getAttribute('data-gpio'));
   var mode = parseInt(sel.value);
   var p = PD.find(x => x.gpio === gpio);
@@ -1198,7 +1198,7 @@ function pinModeChange(sel) {
   .then(d => { if (!d.ok) fetch('/api/pins').then(r=>r.json()).then(d2=>{PD=d2;renderGpio();}); });
 }
 
-function pinToggle(gpio) {
+var pinToggle = function(gpio) {
   var p = PD.find(x => x.gpio === gpio);
   if (!p) return;
   p.value = p.value ? 0 : 1;
@@ -1206,23 +1206,23 @@ function pinToggle(gpio) {
   fetch('/api/pin-write', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({gpio:gpio, value:p.value})});
 }
-function pinPwmDuty(gpio, duty) {
+var pinPwmDuty = function(gpio, duty) {
   var p = PD.find(x => x.gpio===gpio); if(p) p.pwmDuty=parseInt(duty);
   fetch('/api/pin-write', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({gpio:gpio, value:parseInt(duty)})});
 }
-function pinClockFreq(gpio, freq) {
+var pinClockFreq = function(gpio, freq) {
   var p = PD.find(x => x.gpio===gpio); if(p) p.pwmFreq=parseInt(freq)||1000;
   updateOneRow(gpio);
   fetch('/api/pin-set', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({gpio:gpio, mode:13, freq:parseInt(freq)||1000})});
 }
-function pinDac(gpio, val) {
+var pinDac = function(gpio, val) {
   var p = PD.find(x => x.gpio===gpio); if(p) p.lastValue=parseInt(val);
   fetch('/api/pin-write', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({gpio:gpio, value:parseInt(val)})});
 }
-function pinRead(gpio) {
+var pinRead = function(gpio) {
   fetch('/api/pin-read?gpio='+gpio).then(r=>r.json()).then(d => {
     var p = PD.find(x => x.gpio===gpio); if(p) p.lastValue=d.value;
     var vc = document.getElementById('val-'+gpio);
@@ -1231,7 +1231,7 @@ function pinRead(gpio) {
 }
 
 // ── PWM Tab ───────────────────────────────────────────────────
-function renderPwm() {
+var renderPwm = function() {
   var sel = document.getElementById('pwm-gpio');
   sel.innerHTML = '';
   PD.forEach(function(p) {
@@ -1253,7 +1253,7 @@ function renderPwm() {
       +'</div>';
   }).join('');
 }
-function setPwm() {
+var setPwm = function() {
   var gpio=parseInt(document.getElementById('pwm-gpio').value);
   var freq=parseInt(document.getElementById('pwm-fr').value)||1000;
   var duty=parseInt(document.getElementById('pwm-dn').value);
@@ -1262,7 +1262,7 @@ function setPwm() {
     body:JSON.stringify({gpio:gpio,mode:4,freq:freq,duty:duty})})
   .then(()=>document.getElementById('pwm-res').textContent='GPIO '+gpio+' @ '+freq+'Hz Duty='+duty+'/255');
 }
-function stopPwm() {
+var stopPwm = function() {
   var gpio=parseInt(document.getElementById('pwm-gpio').value);
   var p=PD.find(x=>x.gpio===gpio); if(p) p.mode=0;
   fetch('/api/pin-set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({gpio:gpio,mode:0})})
@@ -1270,26 +1270,26 @@ function stopPwm() {
 }
 
 // ── I2C ───────────────────────────────────────────────────────
-function i2cInit() {
+var i2cInit = function() {
   var sda=parseInt(document.getElementById('i2c-sda').value);
   var scl=parseInt(document.getElementById('i2c-scl').value);
   fetch('/api/i2c-init',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sda:sda,scl:scl})})
   .then(r=>r.json()).then(d=>document.getElementById('i2c-sr').textContent=d.ok?'OK: SDA=GPIO'+sda+', SCL=GPIO'+scl:'Fehler');
 }
-function i2cScan() {
+var i2cScan = function() {
   document.getElementById('i2c-sr').textContent='Scanne...';
   fetch('/api/i2c-scan').then(r=>r.json()).then(function(d) {
     if (!d.length) { document.getElementById('i2c-sr').textContent='Keine Geraete'; return; }
     document.getElementById('i2c-sr').innerHTML=d.map(x=>x.hex+(x.name?' — <b style=color:#58a6ff>'+x.name+'</b>':'')).join('<br>');
   });
 }
-function i2cWrite() {
+var i2cWrite = function() {
   var addr=parseInt(document.getElementById('i2c-wa').value);
   var data=document.getElementById('i2c-wd').value.trim();
   fetch('/api/i2c-write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({addr:addr,hex:data})})
   .then(r=>r.json()).then(d=>document.getElementById('i2c-wres').textContent=d.result);
 }
-function i2cRead() {
+var i2cRead = function() {
   var addr=parseInt(document.getElementById('i2c-ra').value);
   var reg=parseInt(document.getElementById('i2c-rr').value);
   var len=parseInt(document.getElementById('i2c-rl').value);
@@ -1301,7 +1301,7 @@ function i2cRead() {
 }
 
 // ── SPI ───────────────────────────────────────────────────────
-function spiInit() {
+var spiInit = function() {
   var b={mosi:parseInt(document.getElementById('spi-mo').value),
          miso:parseInt(document.getElementById('spi-mi').value),
          sck:parseInt(document.getElementById('spi-sc').value),
@@ -1310,7 +1310,7 @@ function spiInit() {
   fetch('/api/spi-init',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})
   .then(r=>r.json()).then(d=>document.getElementById('spi-st').textContent=d.ok?'SPI bereit':'Fehler');
 }
-function spiXfer() {
+var spiXfer = function() {
   var hex=document.getElementById('spi-tx').value.trim();
   var cs=parseInt(document.getElementById('spi-co').value);
   fetch('/api/spi-xfer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cs:cs,hex:hex})})
@@ -1321,7 +1321,7 @@ function spiXfer() {
 }
 
 // ── Status ────────────────────────────────────────────────────
-function fetchStatus() {
+var fetchStatus = function() {
   fetch('/api/status').then(r=>r.json()).then(d=>{
     // Board-Typ setzen und SVG anpassen
     if (d.boardType && d.boardType !== BOARD) {
@@ -1353,20 +1353,20 @@ function fetchStatus() {
   });
 }
 // ── RGB-LED ───────────────────────────────────────────────────
-function rgbPreview() {
+var rgbPreview = function() {
   var r=parseInt(document.getElementById('rgb-r').value);
   var g=parseInt(document.getElementById('rgb-g').value);
   var b=parseInt(document.getElementById('rgb-b').value);
   document.getElementById('rgb-prev').style.background='rgb('+r+','+g+','+b+')';
 }
-function rgbSet(r,g,b) {
+var rgbSet = function(r,g,b) {
   document.getElementById('rgb-r').value=r; document.getElementById('rv').textContent=r;
   document.getElementById('rgb-g').value=g; document.getElementById('gv').textContent=g;
   document.getElementById('rgb-b').value=b; document.getElementById('bv').textContent=b;
   rgbPreview(); rgbSend();
 }
-function rgbOff() { rgbSet(0,0,0); }
-function rgbSend() {
+var rgbOff = function() { rgbSet(0,0,0); }
+var rgbSend = function() {
   var r=parseInt(document.getElementById('rgb-r').value);
   var g=parseInt(document.getElementById('rgb-g').value);
   var b=parseInt(document.getElementById('rgb-b').value);
@@ -1377,8 +1377,8 @@ function rgbSend() {
   .catch(()=>document.getElementById('rgb-res').textContent='Fehler');
 }
 
-function fmtU(s){if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'min '+s%60+'s';return Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'min';}
-)js";
+var fmtU = function(s){if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'min '+s%60+'s';return Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'min';}
+)EOFJS";
 
     // ── HTML zusammenbauen ────────────────────────────────────────
     String html;
