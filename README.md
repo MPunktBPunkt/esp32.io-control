@@ -1,6 +1,6 @@
 # esp32.io-control
 
-![Version](https://img.shields.io/badge/version-1.6.0-blue)
+![Version](https://img.shields.io/badge/version-1.6.1-blue)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Donate](https://img.shields.io/badge/Donate-PayPal-00457C.svg?logo=paypal)](https://www.paypal.com/donate/?business=martin%40bchmnn.de&currency_code=EUR)
 
@@ -60,10 +60,10 @@ Schema: `{name}.{version}.{family}.bin`
 
 | Datei | Board |
 |-------|-------|
-| `io-control.1.6.0.esp32.bin` | ESP32 / D1 Mini |
-| `io-control.1.6.0.esp32s3.bin` | ESP32-S3 |
+| `io-control.1.6.1.esp32.bin` | ESP32 / D1 Mini |
+| `io-control.1.6.1.esp32s3.bin` | ESP32-S3 |
 
-> Hinweis: Vorkompilierte Bins entsprechen Sketch-Stand **1.6.0**.
+> Hinweis: Vorkompilierte Bins entsprechen Sketch-Stand **1.6.1**.
 
 ---
 

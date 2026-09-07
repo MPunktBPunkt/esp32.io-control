@@ -1,6 +1,6 @@
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  esp32.io-control.ino — ESP32 Universal IO Controller       ║
-// ║  Version: 1.6.0                                             ║
+// ║  Version: 1.6.1                                             ║
 // ╠══════════════════════════════════════════════════════════════╣
 // ║  Bibliotheken (Arduino Library Manager):                    ║
 // ║    - WiFiManager  von tablatronix / tzapu                   ║
@@ -41,7 +41,7 @@
 //  KONFIGURATION
 // ================================================================
 #define DEVICE_NAME           "IO-Control"
-#define FW_VERSION            "io-control v1.6.0"
+#define FW_VERSION            "io-control v1.6.1"
 #define HUB_HOST              "192.168.178.113"
 #define HUB_PORT              8093
 #define WIFI_AP_NAME          "ESP-IO-Setup"
@@ -1511,10 +1511,10 @@ var showTab = function(id, el) {
   el.classList.add('active');
   if (id === 'board')  renderBoard();
   if (id === 'gpio')   { fetch('/api/pins').then(r=>r.json()).then(d=>{PD=d;renderGpio();}); }
-  if (id === 'pwm')    renderPwm();
-  if (id === 'clock')  renderClock();
-  if (id === 'dmm')    renderDmm();
-  if (id === 'scope')  renderScope();
+  if (id === 'pwm')    { fetch('/api/pins').then(function(r){return r.json();}).then(function(d){PD=d;renderPwm();}); }
+  if (id === 'clock')  { fetch('/api/pins').then(function(r){return r.json();}).then(function(d){PD=d;renderClock();}); }
+  if (id === 'dmm')    { fetch('/api/pins').then(function(r){return r.json();}).then(function(d){PD=d;renderDmm();}); }
+  if (id === 'scope')  { fetch('/api/pins').then(function(r){return r.json();}).then(function(d){PD=d;renderScope();}); }
   if (id === 'rgb')    rgbPreview();
   if (id === 'status') fetchStatus();
 }
@@ -1759,11 +1759,7 @@ var connectSSE = function() {
     setTimeout(connectSSE, 3000);
   };
 }
-connectSSE();
-fetchStatus();  // Board-Typ sofort erkennen
-document.querySelectorAll('.seg button').forEach(function(b){
-  b.classList.toggle('on', b.getAttribute('data-u')===UNIT_MODE);
-});
+// Init (connectSSE/fetchStatus) erst am Dateiende — nach allen Funktionsdefinitionen
 
 // ── Modus-Aenderung ───────────────────────────────────────────
 var isDriveMode = function(mode) {
@@ -2212,6 +2208,13 @@ var rgbSend = function() {
 }
 
 var fmtU = function(s){if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'min '+s%60+'s';return Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'min';}
+
+// ── Init nach allen Definitionen ──────────────────────────────
+connectSSE();
+fetchStatus();
+document.querySelectorAll('.seg button').forEach(function(b){
+  b.classList.toggle('on', b.getAttribute('data-u')===UNIT_MODE);
+});
 )EOFJS";
 
     // ── HTML zusammenbauen ────────────────────────────────────────
