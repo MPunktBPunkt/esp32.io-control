@@ -1,6 +1,6 @@
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  esp32.io-control.ino — ESP32 Universal IO Controller       ║
-// ║  Version: 1.5.0                                             ║
+// ║  Version: 1.6.0                                             ║
 // ╠══════════════════════════════════════════════════════════════╣
 // ║  Bibliotheken (Arduino Library Manager):                    ║
 // ║    - WiFiManager  von tablatronix / tzapu                   ║
@@ -12,6 +12,7 @@
 // ║    - Software-Takt fuer CLOCK < 50 Hz                       ║
 // ║    - Pin-Schutz, ADC/DAC Volt, board-spezifische Bus-Pins   ║
 // ║    - Interrupt-Counter (COUNT) + ADC Mini-Oszi              ║
+// ║    - Taktgenerator-Tab + Digital-Multimeter-Tab            ║
 // ╚══════════════════════════════════════════════════════════════╝
 
 #include <Arduino.h>
@@ -40,7 +41,7 @@
 //  KONFIGURATION
 // ================================================================
 #define DEVICE_NAME           "IO-Control"
-#define FW_VERSION            "io-control v1.5.0"
+#define FW_VERSION            "io-control v1.6.0"
 #define HUB_HOST              "192.168.178.113"
 #define HUB_PORT              8093
 #define WIFI_AP_NAME          "ESP-IO-Setup"
@@ -289,6 +290,7 @@ void        handleApiStatus();
 void        handleApiScope();
 void        handleApiCountPulse();
 void        handleApiCountReset();
+void        handleApiDmm();
 void        handleSSE();
 void        handleRoot();
 void        handleOtaPage();
@@ -1204,6 +1206,126 @@ void handleApiCountPulse() {
     pushPinsSSE();
 }
 
+void handleApiDmm() {
+    int gpio = webServer.hasArg("gpio") ? webServer.arg("gpio").toInt() : -1;
+    String method = webServer.hasArg("method") ? webServer.arg("method") : "volt";
+    method.toLowerCase();
+    PinInfo* p = findPin(gpio);
+    if (!p) {
+        webServer.send(404, "application/json", "{\"ok\":false,\"err\":\"not_found\"}");
+        return;
+    }
+
+    if (method == "volt" || method == "voltage") {
+        if (!p->hasADC) {
+            webServer.send(400, "application/json", "{\"ok\":false,\"err\":\"no_adc\"}");
+            return;
+        }
+        analogSetPinAttenuation(gpio, ADC_11db);
+        const int N = 24;
+        int vmin = 4095, vmax = 0;
+        long sumRaw = 0, sumMv = 0;
+        int lastRaw = 0, lastMv = 0;
+        for (int i = 0; i < N; i++) {
+            lastRaw = analogRead(gpio);
+            lastMv = analogReadMilliVolts(gpio);
+            if (lastRaw < vmin) vmin = lastRaw;
+            if (lastRaw > vmax) vmax = lastRaw;
+            sumRaw += lastRaw;
+            sumMv += lastMv;
+            delayMicroseconds(200);
+        }
+        int avgRaw = (int)(sumRaw / N);
+        int avgMv = (int)(sumMv / N);
+        String j = "{\"ok\":true,\"method\":\"volt\",\"gpio\":" + String(gpio);
+        j += ",\"raw\":" + String(lastRaw);
+        j += ",\"mV\":" + String(lastMv);
+        j += ",\"volts\":" + String(lastMv / 1000.0f, 4);
+        j += ",\"avgRaw\":" + String(avgRaw);
+        j += ",\"avgMv\":" + String(avgMv);
+        j += ",\"avgVolts\":" + String(avgMv / 1000.0f, 4);
+        j += ",\"minRaw\":" + String(vmin);
+        j += ",\"maxRaw\":" + String(vmax);
+        j += ",\"adc2\":" + String(isAdc2Gpio(gpio) ? "true" : "false");
+        j += "}";
+        webServer.send(200, "application/json", j);
+        return;
+    }
+
+    if (method == "logic") {
+        uint8_t modeSave = p->mode;
+        pinMode(gpio, INPUT_PULLUP);
+        delayMicroseconds(50);
+        int level = digitalRead(gpio);
+        p->mode = modeSave;
+        applyPinMode(p);
+        String j = "{\"ok\":true,\"method\":\"logic\",\"gpio\":" + String(gpio);
+        j += ",\"level\":" + String(level);
+        j += ",\"high\":" + String(level ? "true" : "false");
+        j += ",\"label\":\"" + String(level ? "HIGH" : "LOW") + "\"}";
+        webServer.send(200, "application/json", j);
+        return;
+    }
+
+    if (method == "freq" || method == "period" || method == "duty") {
+        uint8_t modeSave = p->mode;
+        pinMode(gpio, INPUT);
+        unsigned long timeoutU = 500000UL;
+        unsigned long tHigh = pulseIn(gpio, HIGH, timeoutU);
+        unsigned long tLow  = pulseIn(gpio, LOW,  timeoutU);
+        p->mode = modeSave;
+        applyPinMode(p);
+
+        if (tHigh == 0 || tLow == 0) {
+            webServer.send(200, "application/json",
+                "{\"ok\":false,\"err\":\"no_signal\",\"method\":\"" + method +
+                "\",\"gpio\":" + String(gpio) + "}");
+            return;
+        }
+        unsigned long periodUs = tHigh + tLow;
+        float freq = 1000000.0f / (float)periodUs;
+        float duty = 100.0f * (float)tHigh / (float)periodUs;
+        String j = "{\"ok\":true,\"method\":\"" + method + "\",\"gpio\":" + String(gpio);
+        j += ",\"periodUs\":" + String((unsigned long)periodUs);
+        j += ",\"highUs\":" + String((unsigned long)tHigh);
+        j += ",\"lowUs\":" + String((unsigned long)tLow);
+        j += ",\"freqHz\":" + String(freq, 3);
+        j += ",\"dutyPct\":" + String(duty, 2);
+        j += "}";
+        webServer.send(200, "application/json", j);
+        return;
+    }
+
+    if (method == "count") {
+        if (p->mode == PM_COUNT) {
+            readAllPins();
+            String j = "{\"ok\":true,\"method\":\"count\",\"gpio\":" + String(gpio);
+            j += ",\"count\":" + String(p->lastValue);
+            j += ",\"freqHz\":" + String(p->countHz) + "}";
+            webServer.send(200, "application/json", j);
+            return;
+        }
+        uint8_t prev = p->mode;
+        p->mode = PM_COUNT;
+        applyPinMode(p);
+        delay(1100);
+        readAllPins();
+        uint32_t cnt = getEdgeCount(gpio);
+        uint32_t hz = getEdgeFreq(gpio);
+        p->mode = prev;
+        applyPinMode(p);
+        String j = "{\"ok\":true,\"method\":\"count\",\"gpio\":" + String(gpio);
+        j += ",\"count\":" + String(cnt);
+        j += ",\"freqHz\":" + String(hz);
+        j += ",\"windowMs\":1000}";
+        webServer.send(200, "application/json", j);
+        return;
+    }
+
+    webServer.send(400, "application/json",
+        "{\"ok\":false,\"err\":\"method\",\"hint\":\"volt|logic|freq|period|duty|count\"}");
+}
+
 // ================================================================
 //  WEB UI  — Raw String Literals
 // ================================================================
@@ -1237,6 +1359,8 @@ select,input[type=text],input[type=number]{background:#0d1117;color:#e6edf3;bord
 .seg{display:inline-flex;border:1px solid #30363d;border-radius:6px;overflow:hidden;margin-left:8px}
 .seg button{background:#0d1117;color:#8b949e;border:0;padding:3px 10px;font-size:11px;cursor:pointer}
 .seg button.on{background:#1f6feb;color:#fff}
+.dmm-main{font-size:42px;font-weight:700;font-family:monospace;color:#58a6ff;letter-spacing:1px;margin:8px 0}
+.dmm-sub{font-size:12px;color:#8b949e;font-family:monospace;min-height:18px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:600px){.grid2{grid-template-columns:1fr}}
 textarea{background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:4px;padding:6px;font-family:monospace;font-size:12px;width:100%;resize:vertical}
@@ -1388,6 +1512,8 @@ var showTab = function(id, el) {
   if (id === 'board')  renderBoard();
   if (id === 'gpio')   { fetch('/api/pins').then(r=>r.json()).then(d=>{PD=d;renderGpio();}); }
   if (id === 'pwm')    renderPwm();
+  if (id === 'clock')  renderClock();
+  if (id === 'dmm')    renderDmm();
   if (id === 'scope')  renderScope();
   if (id === 'rgb')    rgbPreview();
   if (id === 'status') fetchStatus();
@@ -1784,6 +1910,139 @@ var drawScope = function(data, vmin, vmax) {
   ctx.fillText(String(vmin), 4, h-4);
 }
 
+// ── Taktgenerator ─────────────────────────────────────────────
+var renderClock = function() {
+  var sel=document.getElementById('ck-gpio');
+  if (!sel) return;
+  var cur=sel.value;
+  sel.innerHTML='';
+  PD.forEach(function(p){
+    if (!p.hasPWM || p.inputOnly) return;
+    var o=document.createElement('option');
+    o.value=p.gpio;
+    o.text='GPIO '+p.gpio+' ('+p.label+')'+(p.mode===13?' CLK':'')+(p.restricted?' !':'');
+    sel.appendChild(o);
+  });
+  if (cur) sel.value=cur;
+  var lst=document.getElementById('ck-list');
+  var act=PD.filter(function(p){return p.mode===13;});
+  if (!act.length) { lst.innerHTML='<span style=color:#555>Kein aktiver Takt</span>'; return; }
+  lst.innerHTML=act.map(function(p){
+    return '<div style="margin-bottom:6px"><span class=mono>GPIO '+p.gpio+'</span> · '+p.pwmFreq+' Hz (50% Duty)</div>';
+  }).join('');
+}
+var clockStart = function() {
+  var gpio=parseInt(document.getElementById('ck-gpio').value);
+  var freq=parseInt(document.getElementById('ck-fr').value)||1000;
+  if (freq < 1) freq=1;
+  if (freq > 40000000) freq=40000000;
+  var p=PD.find(function(x){return x.gpio===gpio;});
+  var force=false;
+  if (p && p.restricted) {
+    if (!confirm('GPIO '+gpio+' geschuetzt. Takt starten?')) return;
+    force=true;
+  }
+  if (p){p.mode=13;p.pwmFreq=freq;}
+  fetch('/api/pin-set',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({gpio:gpio,mode:13,freq:freq,force:force})})
+  .then(function(r){return r.json();}).then(function(d){
+    document.getElementById('ck-res').textContent=d.ok
+      ? ('Takt GPIO '+gpio+' @ '+freq+' Hz'+(freq<50?' (Software)':' (LEDC)'))
+      : ('Fehler: '+(d.err||'?'));
+    renderClock();
+  });
+}
+var clockStop = function() {
+  var gpio=parseInt(document.getElementById('ck-gpio').value);
+  fetch('/api/pin-set',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({gpio:gpio,mode:0})})
+  .then(function(){ document.getElementById('ck-res').textContent='GPIO '+gpio+' gestoppt'; renderClock(); });
+}
+
+// ── Digital Multimeter ────────────────────────────────────────
+var dmmTimer=null;
+var renderDmm = function() {
+  dmmFillPins();
+  dmmApplyMethodFilter();
+}
+var dmmFillPins = function() {
+  var method=(document.getElementById('dmm-method')||{}).value||'volt';
+  var sel=document.getElementById('dmm-gpio');
+  if (!sel) return;
+  var cur=sel.value;
+  sel.innerHTML='';
+  PD.forEach(function(p){
+    if (method==='volt' && !p.hasADC) return;
+    var o=document.createElement('option');
+    o.value=p.gpio;
+    o.text='GPIO '+p.gpio+' ('+p.label+')'+(p.adc2?' ADC2':'')+(p.restricted?' !':'');
+    sel.appendChild(o);
+  });
+  if (cur) sel.value=cur;
+}
+var dmmApplyMethodFilter = function() {
+  dmmFillPins();
+  var hint={
+    volt:'ADC-Spannung 0–3.3 V (Mittelwert aus 24 Samples). ADC1 bevorzugen.',
+    logic:'Digitalpegel mit internem Pull-up (HIGH/LOW).',
+    freq:'Frequenz/Period/Duty via pulseIn (Rechtecksignal noetig).',
+    period:'Periodendauer High+Low (pulseIn).',
+    duty:'Tastgrad in % (pulseIn).',
+    count:'Flanken/s — 1 s Messfenster (Interrupt COUNT).'
+  };
+  var m=document.getElementById('dmm-method').value;
+  document.getElementById('dmm-hint').textContent=hint[m]||'';
+}
+var dmmReadOnce = function() {
+  var gpio=parseInt(document.getElementById('dmm-gpio').value);
+  var method=document.getElementById('dmm-method').value;
+  document.getElementById('dmm-main').textContent='…';
+  fetch('/api/dmm?gpio='+gpio+'&method='+method)
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if (!d.ok) {
+      document.getElementById('dmm-main').textContent='—';
+      document.getElementById('dmm-sub').textContent=d.err==='no_signal'?'Kein Signal':('Fehler: '+(d.err||'?'));
+      return;
+    }
+    if (d.method==='volt') {
+      document.getElementById('dmm-main').textContent=d.avgVolts.toFixed(3)+' V';
+      document.getElementById('dmm-sub').textContent=
+        'raw avg '+d.avgRaw+' · last '+d.mV+' mV · min/max raw '+d.minRaw+'/'+d.maxRaw+(d.adc2?' · ADC2!':'');
+    } else if (d.method==='logic') {
+      document.getElementById('dmm-main').textContent=d.label;
+      document.getElementById('dmm-sub').textContent='level='+d.level;
+    } else if (d.method==='count') {
+      document.getElementById('dmm-main').textContent=d.freqHz+' Hz';
+      document.getElementById('dmm-sub').textContent='count='+d.count+(d.windowMs?' / '+d.windowMs+' ms':'');
+    } else {
+      document.getElementById('dmm-main').textContent=
+        (d.method==='duty') ? (d.dutyPct.toFixed(1)+' %') :
+        (d.method==='period') ? (d.periodUs+' µs') :
+        (d.freqHz.toFixed(2)+' Hz');
+      document.getElementById('dmm-sub').textContent=
+        'T='+d.periodUs+' µs · High '+d.highUs+' · Low '+d.lowUs+' · Duty '+d.dutyPct+'% · f='+d.freqHz+' Hz';
+    }
+  }).catch(function(){
+    document.getElementById('dmm-main').textContent='—';
+    document.getElementById('dmm-sub').textContent='Fehler';
+  });
+}
+var dmmHold = function(on) {
+  if (dmmTimer) { clearInterval(dmmTimer); dmmTimer=null; }
+  var btn=document.getElementById('dmm-hold');
+  if (on) {
+    dmmReadOnce();
+    dmmTimer=setInterval(dmmReadOnce, 500);
+    if (btn) btn.textContent='Hold stoppen';
+  } else {
+    if (btn) btn.textContent='Hold (0.5s)';
+  }
+}
+var dmmToggleHold = function() {
+  if (dmmTimer) dmmHold(false); else dmmHold(true);
+}
+
 // ── PWM Tab ───────────────────────────────────────────────────
 var renderPwm = function() {
   var sel = document.getElementById('pwm-gpio');
@@ -1977,6 +2236,8 @@ var fmtU = function(s){if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'m
         "<div class='tab' onclick='showTab(\"gpio\",this)'>&#9889; GPIO</div>"
         "<div class='tab' onclick='showTab(\"proto\",this)'>&#128260; Protokolle</div>"
         "<div class='tab' onclick='showTab(\"pwm\",this)'>&#126; PWM</div>"
+        "<div class='tab' onclick='showTab(\"clock\",this)'>&#128336; Takt</div>"
+        "<div class='tab' onclick='showTab(\"dmm\",this)'>&#128207; DMM</div>"
         "<div class='tab' onclick='showTab(\"scope\",this)'>&#128202; Oszi</div>"
         "<div class='tab' onclick='showTab(\"status\",this)'>&#128202; Status</div>"
         "<div class='tab' id='rgb-tab' style='display:none' onclick='showTab(\"rgb\",this)'>&#127752; RGB</div>"
@@ -2121,6 +2382,59 @@ ADC2-Pins am klassischen ESP32 sind bei aktivem WiFi unzuverlaessig. COUNT = Fla
 <tr><td style='color:#8b949e'>Max. Freq</td><td>~40 MHz (8-bit LEDC)</td></tr>
 <tr><td style='color:#8b949e'>CLOCK &lt; 50Hz</td><td>Software-Toggle (micros)</td></tr>
 <tr><td style='color:#8b949e'>CLOCK &ge; 50Hz</td><td>LEDC Hardware-PWM 50% Duty</td></tr>
+</table></div></div>
+)html");
+
+    // ── Clock Pane ────────────────────────────────────────────────
+    html += F(R"html(
+<div class='pane' id='pane-clock'><div class='card'>
+<h3>Taktgenerator</h3>
+<p style='font-size:11px;color:#8b949e;margin-bottom:10px'>
+Rechteck 50% Duty. &lt;50&nbsp;Hz Software-Toggle, ab 50&nbsp;Hz LEDC-Hardware.
+Sinnvoller Arbeitsbereich ca. 1&nbsp;Hz–einige MHz (theoretisch bis ~40&nbsp;MHz).
+</p>
+<div class='row'>
+  <label>GPIO</label><select id='ck-gpio' style='width:180px'></select>
+  <label>Freq Hz</label><input type='number' id='ck-fr' value='1000' min='1' max='40000000' style='width:120px'>
+  <button class='btn btn-g' onclick='clockStart()'>Start</button>
+  <button class='btn btn-r' onclick='clockStop()'>Stop</button>
+</div>
+<div class='rbox' id='ck-res'>&#8212;</div>
+<hr style='border-color:#21262d;margin:14px 0'>
+<h3 style='margin-bottom:8px'>Aktive Takte</h3>
+<div id='ck-list'>&#8212;</div>
+</div></div>
+)html");
+
+    // ── DMM Pane ──────────────────────────────────────────────────
+    html += F(R"html(
+<div class='pane' id='pane-dmm'><div class='card'>
+<h3>Digital Multimeter</h3>
+<p id='dmm-hint' style='font-size:11px;color:#8b949e;margin-bottom:10px'>ADC-Spannung 0–3.3 V</p>
+<div class='row'>
+  <label>Methode</label>
+  <select id='dmm-method' onchange='dmmApplyMethodFilter()' style='width:130px'>
+    <option value='volt'>Spannung</option>
+    <option value='logic'>Logik</option>
+    <option value='freq'>Frequenz</option>
+    <option value='period'>Periode</option>
+    <option value='duty'>Duty</option>
+    <option value='count'>Counter</option>
+  </select>
+  <label>GPIO</label><select id='dmm-gpio' style='width:180px'></select>
+  <button class='btn btn-g' onclick='dmmReadOnce()'>Messen</button>
+  <button class='btn btn-b' id='dmm-hold' onclick='dmmToggleHold()'>Hold (0.5s)</button>
+</div>
+<div class='dmm-main' id='dmm-main'>—</div>
+<div class='dmm-sub' id='dmm-sub'>Bereit</div>
+</div>
+<div class='card'><h3>Hinweise</h3>
+<table>
+<tr><td style='color:#8b949e'>Spannung</td><td>ADC, 0–3.3&nbsp;V · Min/Avg/Max aus 24 Samples</td></tr>
+<tr><td style='color:#8b949e'>Logik</td><td>HIGH/LOW mit Pull-up</td></tr>
+<tr><td style='color:#8b949e'>Freq/Period/Duty</td><td>pulseIn am Pin (Rechteck noetig)</td></tr>
+<tr><td style='color:#8b949e'>Counter</td><td>1&nbsp;s Interrupt-Fenster (FALLING)</td></tr>
+<tr><td style='color:#8b949e'>Ohne Extra-HW</td><td>kein Strom/Widerstand (Shunt/Teiler noetig)</td></tr>
 </table></div></div>
 )html");
 
@@ -2332,6 +2646,7 @@ void setupWebServer() {
     webServer.on("/api/rgb",       HTTP_POST, handleApiRgb);
     webServer.on("/api/status",    HTTP_GET,  handleApiStatus);
     webServer.on("/api/scope",     HTTP_GET,  handleApiScope);
+    webServer.on("/api/dmm",       HTTP_GET,  handleApiDmm);
     webServer.on("/api/count-reset", HTTP_POST, handleApiCountReset);
     webServer.on("/api/count-pulse", HTTP_POST, handleApiCountPulse);
     webServer.onNotFound(handleNotFound);

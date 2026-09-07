@@ -1,6 +1,6 @@
 # esp32.io-control
 
-![Version](https://img.shields.io/badge/version-1.5.0-blue)
+![Version](https://img.shields.io/badge/version-1.6.0-blue)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Donate](https://img.shields.io/badge/Donate-PayPal-00457C.svg?logo=paypal)](https://www.paypal.com/donate/?business=martin%40bchmnn.de&currency_code=EUR)
 
@@ -60,10 +60,10 @@ Schema: `{name}.{version}.{family}.bin`
 
 | Datei | Board |
 |-------|-------|
-| `io-control.1.5.0.esp32.bin` | ESP32 / D1 Mini |
-| `io-control.1.5.0.esp32s3.bin` | ESP32-S3 |
+| `io-control.1.6.0.esp32.bin` | ESP32 / D1 Mini |
+| `io-control.1.6.0.esp32s3.bin` | ESP32-S3 |
 
-> Hinweis: Vorkompilierte Bins entsprechen Sketch-Stand **1.5.0**.
+> Hinweis: Vorkompilierte Bins entsprechen Sketch-Stand **1.6.0**.
 
 ---
 
@@ -75,6 +75,8 @@ Schema: `{name}.{version}.{family}.bin`
 | **GPIO** | Modus wählen, Werte lesen/schreiben, Raw/Volt-Umschalter |
 | **Protokolle** | I2C Scan/Read/Write, SPI Transfer |
 | **PWM** | Frequenz + Duty-Slider |
+| **Takt** | Rechteck-Taktgenerator (CLOCK, 50% Duty) |
+| **DMM** | Spannung, Logik, Frequenz/Period/Duty, Counter |
 | **Oszi** | ADC-Capture mit Canvas-Chart |
 | **Status** | Chip, Heap, Uptime, OTA-Link |
 | **RGB** | WS2812 (ESP32-S3, GPIO38) |
@@ -141,6 +143,7 @@ Dashboard: `http://<ioBroker-IP>:8093`
 | POST | `/api/spi-init` / `/api/spi-xfer` | SPI Init/Transfer |
 | POST | `/api/rgb` | WS2812 Farbe |
 | GET | `/api/scope` | ADC-Capture `?gpio=&samples=&rate=` |
+| GET | `/api/dmm` | Multimeter `?gpio=&method=volt\|logic\|freq\|period\|duty\|count` |
 | POST | `/api/count-reset` | Counter zurücksetzen |
 | POST | `/api/count-pulse` | Self-Test-Pulse auf COUNT-Pin |
 
