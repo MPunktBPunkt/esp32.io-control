@@ -1,6 +1,6 @@
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  esp32.io-control.ino — ESP32 Universal IO Controller       ║
-// ║  Version: 1.4.0                                             ║
+// ║  Version: 1.5.0                                             ║
 // ╠══════════════════════════════════════════════════════════════╣
 // ║  Bibliotheken (Arduino Library Manager):                    ║
 // ║    - WiFiManager  von tablatronix / tzapu                   ║
@@ -11,6 +11,7 @@
 // ║    - driveOutputPins() gegen WiFi-Stack-Eingriffe           ║
 // ║    - Software-Takt fuer CLOCK < 50 Hz                       ║
 // ║    - Pin-Schutz, ADC/DAC Volt, board-spezifische Bus-Pins   ║
+// ║    - Interrupt-Counter (COUNT) + ADC Mini-Oszi              ║
 // ╚══════════════════════════════════════════════════════════════╝
 
 #include <Arduino.h>
@@ -39,7 +40,7 @@
 //  KONFIGURATION
 // ================================================================
 #define DEVICE_NAME           "IO-Control"
-#define FW_VERSION            "io-control v1.4.0"
+#define FW_VERSION            "io-control v1.5.0"
 #define HUB_HOST              "192.168.178.113"
 #define HUB_PORT              8093
 #define WIFI_AP_NAME          "ESP-IO-Setup"
@@ -48,6 +49,8 @@
 #define RESET_BUTTON_PIN      0
 #define RESET_HOLD_SEC        3
 #define DAC_VREF_MV           3300
+#define COUNT_MAX             8
+#define SCOPE_MAX_SAMPLES     400
 
 // ================================================================
 //  PIN-MODI
@@ -67,15 +70,16 @@
 #define PM_SPI_CS    12
 #define PM_CLOCK     13
 #define PM_RGB       14   // WS2812 RGB-LED (neopixelWrite)
-#define PM_MODE_MAX  15
+#define PM_COUNT     15   // Interrupt-Flankenzaehler (FALLING)
+#define PM_MODE_MAX  16
 
 const char* modeNames[PM_MODE_MAX] = {
     "DISABLED","INPUT","INPUT_PU","OUTPUT","PWM","ADC","DAC",
-    "I2C_SDA","I2C_SCL","SPI_MOSI","SPI_MISO","SPI_SCK","SPI_CS","CLOCK","RGB"
+    "I2C_SDA","I2C_SCL","SPI_MOSI","SPI_MISO","SPI_SCK","SPI_CS","CLOCK","RGB","COUNT"
 };
 const char* modeColors[PM_MODE_MAX] = {
     "#444","#2ecc71","#27ae60","#e74c3c","#e67e22","#9b59b6","#8e44ad",
-    "#3498db","#2980b9","#1abc9c","#16a085","#17a589","#0e6655","#f39c12","#e91e8c"
+    "#3498db","#2980b9","#1abc9c","#16a085","#17a589","#0e6655","#f39c12","#e91e8c","#f1c40f"
 };
 
 struct PinInfo {
@@ -89,7 +93,8 @@ struct PinInfo {
     int         lastValue;
     uint32_t    pwmFreq;
     uint8_t     pwmDuty;
-    int         lastMv;   // runtime: ADC mV oder DAC-Soll in mV
+    int         lastMv;    // runtime: ADC mV oder DAC-Soll in mV
+    uint32_t    countHz;   // runtime: COUNT Frequenz (Hz)
 };
 
 // ================================================================
@@ -216,6 +221,17 @@ struct SoftClock {
 static SoftClock    softClocks[8];
 static const uint32_t SW_CLK_THRESHOLD = 50;
 
+// Interrupt-Flankenzaehler (COUNT)
+struct EdgeCounter {
+    uint8_t           gpio        = 255;
+    volatile uint32_t count       = 0;
+    uint32_t          lastCount   = 0;
+    uint32_t          freqHz      = 0;
+    unsigned long     windowStart = 0;
+};
+static EdgeCounter edgeCounters[COUNT_MAX];
+static uint16_t    scopeBuf[SCOPE_MAX_SAMPLES];
+
 // ================================================================
 //  FORWARD DECLARATIONS
 // ================================================================
@@ -235,6 +251,12 @@ void        driveOutputPins();
 void        tickSoftClocks();
 void        startSoftClock(uint8_t gpio, uint32_t freqHz);
 void        stopSoftClock(uint8_t gpio);
+void        startEdgeCounter(uint8_t gpio);
+void        stopEdgeCounter(uint8_t gpio);
+void        tickEdgeCounters();
+void        resetEdgeCounter(uint8_t gpio);
+uint32_t    getEdgeCount(uint8_t gpio);
+uint32_t    getEdgeFreq(uint8_t gpio);
 void        saveModesToPrefs();
 void        loadModesFromPrefs();
 String      buildPinsJson();
@@ -264,6 +286,9 @@ void        handleApiSpiInit();
 void        handleApiSpiXfer();
 void        handleApiRgb();
 void        handleApiStatus();
+void        handleApiScope();
+void        handleApiCountPulse();
+void        handleApiCountReset();
 void        handleSSE();
 void        handleRoot();
 void        handleOtaPage();
@@ -333,6 +358,7 @@ const char* hubIoType(uint8_t mode) {
         case PM_INPUT:
         case PM_INPUT_PU:
         case PM_ADC:
+        case PM_COUNT:
             return "sensor";
         case PM_OUTPUT:
         case PM_PWM:
@@ -468,13 +494,89 @@ void tickSoftClocks() {
 }
 
 // ================================================================
+//  EDGE COUNTER (COUNT)
+// ================================================================
+void IRAM_ATTR edgeIsr(void* arg) {
+    EdgeCounter* c = (EdgeCounter*)arg;
+    if (c) c->count++;
+}
+
+void stopEdgeCounter(uint8_t gpio) {
+    for (int i = 0; i < COUNT_MAX; i++) {
+        if (edgeCounters[i].gpio == gpio) {
+            detachInterrupt(digitalPinToInterrupt(gpio));
+            edgeCounters[i].gpio = 255;
+            edgeCounters[i].count = 0;
+            edgeCounters[i].lastCount = 0;
+            edgeCounters[i].freqHz = 0;
+            return;
+        }
+    }
+}
+
+void startEdgeCounter(uint8_t gpio) {
+    stopEdgeCounter(gpio);
+    for (int i = 0; i < COUNT_MAX; i++) {
+        if (edgeCounters[i].gpio == 255) {
+            edgeCounters[i].gpio = gpio;
+            edgeCounters[i].count = 0;
+            edgeCounters[i].lastCount = 0;
+            edgeCounters[i].freqHz = 0;
+            edgeCounters[i].windowStart = millis();
+            pinMode(gpio, INPUT_PULLUP);
+            attachInterruptArg(digitalPinToInterrupt(gpio), edgeIsr, &edgeCounters[i], FALLING);
+            return;
+        }
+    }
+}
+
+void resetEdgeCounter(uint8_t gpio) {
+    for (int i = 0; i < COUNT_MAX; i++) {
+        if (edgeCounters[i].gpio == gpio) {
+            noInterrupts();
+            edgeCounters[i].count = 0;
+            edgeCounters[i].lastCount = 0;
+            edgeCounters[i].freqHz = 0;
+            edgeCounters[i].windowStart = millis();
+            interrupts();
+            return;
+        }
+    }
+}
+
+uint32_t getEdgeCount(uint8_t gpio) {
+    for (int i = 0; i < COUNT_MAX; i++)
+        if (edgeCounters[i].gpio == gpio) return edgeCounters[i].count;
+    return 0;
+}
+
+uint32_t getEdgeFreq(uint8_t gpio) {
+    for (int i = 0; i < COUNT_MAX; i++)
+        if (edgeCounters[i].gpio == gpio) return edgeCounters[i].freqHz;
+    return 0;
+}
+
+void tickEdgeCounters() {
+    unsigned long now = millis();
+    for (int i = 0; i < COUNT_MAX; i++) {
+        if (edgeCounters[i].gpio == 255) continue;
+        if (now - edgeCounters[i].windowStart >= 1000UL) {
+            uint32_t c = edgeCounters[i].count;
+            edgeCounters[i].freqHz = c - edgeCounters[i].lastCount;
+            edgeCounters[i].lastCount = c;
+            edgeCounters[i].windowStart = now;
+        }
+    }
+}
+
+// ================================================================
 //  PIN MANAGEMENT
 // ================================================================
 void releasePinHardware(PinInfo* p) {
     if (!p) return;
     stopSoftClock(p->gpio);
+    stopEdgeCounter(p->gpio);
     if (p->hasPWM) {
-        // ledcDetach ist no-op, wenn der Pin nicht attached war
         ledcDetach(p->gpio);
     }
 }
@@ -543,6 +645,11 @@ void applyPinMode(PinInfo* p) {
             pinMode(p->gpio, OUTPUT);
             neopixelWrite(p->gpio, 0, 0, 0);
             break;
+        case PM_COUNT:
+            startEdgeCounter(p->gpio);
+            p->lastValue = 0;
+            p->countHz = 0;
+            break;
         case PM_I2C_SDA:
         case PM_I2C_SCL:
             pinMode(p->gpio, INPUT_PULLUP);
@@ -567,6 +674,7 @@ void applyPinMode(PinInfo* p) {
 }
 
 void readAllPins() {
+    tickEdgeCounters();
     for (int i = 0; i < PIN_COUNT; i++) {
         PinInfo& p = pins[i];
         if (p.mode == PM_INPUT || p.mode == PM_INPUT_PU) {
@@ -577,6 +685,9 @@ void readAllPins() {
             p.lastMv = analogReadMilliVolts(p.gpio);
         } else if (p.mode == PM_DAC) {
             p.lastMv = (int)lroundf(dacVoltsFromRaw(p.lastValue) * 1000.0f);
+        } else if (p.mode == PM_COUNT) {
+            p.lastValue = (int)getEdgeCount(p.gpio);
+            p.countHz = getEdgeFreq(p.gpio);
         }
     }
 }
@@ -662,6 +773,7 @@ String buildPinsJson() {
         j += ",\"modeStr\":\"" + String(modeNames[p.mode]) + "\"";
         j += ",\"value\":"     + String(p.lastValue);
         j += ",\"mV\":"        + String(p.lastMv);
+        j += ",\"countHz\":"   + String(p.countHz);
         j += ",\"pwmFreq\":"   + String(p.pwmFreq);
         j += ",\"pwmDuty\":"   + String(p.pwmDuty);
         j += "}";
@@ -976,9 +1088,120 @@ void handleApiStatus() {
     j += ",\"spiSck\":"      + String(spiSck);
     j += ",\"spiCs\":"       + String(spiCs);
     j += ",\"dacSupported\":"+ String(DAC_SUPPORTED ? "true" : "false");
+    j += ",\"scopeMax\":"    + String(SCOPE_MAX_SAMPLES);
     j += ",\"i2cReady\":"    + String(i2cReady?"true":"false");
     j += ",\"spiReady\":"    + String(spiReady?"true":"false") + "}";
     webServer.send(200, "application/json", j);
+}
+
+void handleApiScope() {
+    int gpio = webServer.hasArg("gpio") ? webServer.arg("gpio").toInt() : -1;
+    int samples = webServer.hasArg("samples") ? webServer.arg("samples").toInt() : 200;
+    int rate = webServer.hasArg("rate") ? webServer.arg("rate").toInt() : 5000;
+    samples = constrain(samples, 10, SCOPE_MAX_SAMPLES);
+    rate = constrain(rate, 100, 20000);
+    PinInfo* p = findPin(gpio);
+    if (!p || !p->hasADC) {
+        webServer.send(400, "application/json", "{\"ok\":false,\"err\":\"no_adc\"}");
+        return;
+    }
+    analogSetPinAttenuation(gpio, ADC_11db);
+    unsigned long periodUs = 1000000UL / (unsigned long)rate;
+    unsigned long t0 = micros();
+    int vmin = 4095, vmax = 0;
+    long sum = 0;
+    for (int i = 0; i < samples; i++) {
+        int v = analogRead(gpio);
+        scopeBuf[i] = (uint16_t)v;
+        if (v < vmin) vmin = v;
+        if (v > vmax) vmax = v;
+        sum += v;
+        unsigned long next = t0 + (unsigned long)(i + 1) * periodUs;
+        while ((long)(micros() - next) < 0) { /* spin wait */ }
+    }
+    String j = "{\"ok\":true,\"gpio\":" + String(gpio);
+    j += ",\"samples\":" + String(samples);
+    j += ",\"rate\":" + String(rate);
+    j += ",\"min\":" + String(vmin);
+    j += ",\"max\":" + String(vmax);
+    j += ",\"avg\":" + String((int)(sum / samples));
+    j += ",\"data\":[";
+    for (int i = 0; i < samples; i++) {
+        if (i) j += ",";
+        j += String(scopeBuf[i]);
+    }
+    j += "]}";
+    webServer.send(200, "application/json", j);
+}
+
+void handleApiCountReset() {
+    if (!webServer.hasArg("plain")) { webServer.send(400); return; }
+    #if ARDUINOJSON_VERSION_MAJOR >= 7
+      JsonDocument doc;
+    #else
+      DynamicJsonDocument doc(128);
+    #endif
+    if (deserializeJson(doc, webServer.arg("plain"))) { webServer.send(400); return; }
+    int gpio = doc["gpio"] | -1;
+    PinInfo* p = findPin(gpio);
+    if (!p || p->mode != PM_COUNT) {
+        webServer.send(400, "application/json", "{\"ok\":false,\"err\":\"not_count\"}");
+        return;
+    }
+    resetEdgeCounter(gpio);
+    p->lastValue = 0;
+    p->countHz = 0;
+    webServer.send(200, "application/json", "{\"ok\":true,\"gpio\":" + String(gpio) + ",\"count\":0}");
+    pushPinsSSE();
+}
+
+// Self-test: erzeugt N FALLING-Flanken am COUNT-Pin (ohne externe Verdrahtung)
+void handleApiCountPulse() {
+    if (!webServer.hasArg("plain")) { webServer.send(400); return; }
+    #if ARDUINOJSON_VERSION_MAJOR >= 7
+      JsonDocument doc;
+    #else
+      DynamicJsonDocument doc(128);
+    #endif
+    if (deserializeJson(doc, webServer.arg("plain"))) { webServer.send(400); return; }
+    int gpio = doc["gpio"] | -1;
+    int n = doc["n"] | 10;
+    n = constrain(n, 1, 1000);
+    PinInfo* p = findPin(gpio);
+    if (!p || p->mode != PM_COUNT) {
+        webServer.send(400, "application/json", "{\"ok\":false,\"err\":\"not_count\"}");
+        return;
+    }
+    if (isRestrictedGpio(gpio) && !(doc["force"] | false)) {
+        webServer.send(403, "application/json", "{\"ok\":false,\"err\":\"restricted\"}");
+        return;
+    }
+    uint32_t before = getEdgeCount(gpio);
+    for (int i = 0; i < n; i++) {
+        pinMode(gpio, OUTPUT);
+        digitalWrite(gpio, LOW);
+        delayMicroseconds(80);
+        pinMode(gpio, INPUT_PULLUP);
+        delayMicroseconds(80);
+    }
+    // Interrupt wieder sicher stellen
+    detachInterrupt(digitalPinToInterrupt(gpio));
+    for (int i = 0; i < COUNT_MAX; i++) {
+        if (edgeCounters[i].gpio == gpio) {
+            attachInterruptArg(digitalPinToInterrupt(gpio), edgeIsr, &edgeCounters[i], FALLING);
+            break;
+        }
+    }
+    delay(20);
+    uint32_t after = getEdgeCount(gpio);
+    p->lastValue = (int)after;
+    webServer.send(200, "application/json",
+        "{\"ok\":true,\"gpio\":" + String(gpio)
+        + ",\"pulses\":" + String(n)
+        + ",\"before\":" + String(before)
+        + ",\"after\":" + String(after)
+        + ",\"delta\":" + String(after - before) + "}");
+    pushPinsSSE();
 }
 
 // ================================================================
@@ -1026,10 +1249,10 @@ label{font-size:12px;color:#8b949e;white-space:nowrap}
 
     // ── JAVASCRIPT ───────────────────────────────────────────────
     static const char JS[] PROGMEM = R"EOFJS(
-var MC=['#444','#2ecc71','#27ae60','#e74c3c','#e67e22','#9b59b6','#8e44ad',
-        '#3498db','#2980b9','#1abc9c','#16a085','#17a589','#0e6655','#f39c12','#e91e8c'];
 var MN=['DISABLED','INPUT','INPUT_PU','OUTPUT','PWM','ADC','DAC',
-        'I2C_SDA','I2C_SCL','SPI_MOSI','SPI_MISO','SPI_SCK','SPI_CS','CLOCK','RGB'];
+        'I2C_SDA','I2C_SCL','SPI_MOSI','SPI_MISO','SPI_SCK','SPI_CS','CLOCK','RGB','COUNT'];
+var MC=['#444','#2ecc71','#27ae60','#e74c3c','#e67e22','#9b59b6','#8e44ad',
+        '#3498db','#2980b9','#1abc9c','#16a085','#17a589','#0e6655','#f39c12','#e91e8c','#f1c40f'];
 
 // Board layout: ViewBox 1000x300
 // 4 Spalten × 10 Reihen nach echtem Wemos D1 Mini ESP32 Pinout
@@ -1165,6 +1388,7 @@ var showTab = function(id, el) {
   if (id === 'board')  renderBoard();
   if (id === 'gpio')   { fetch('/api/pins').then(r=>r.json()).then(d=>{PD=d;renderGpio();}); }
   if (id === 'pwm')    renderPwm();
+  if (id === 'scope')  renderScope();
   if (id === 'rgb')    rgbPreview();
   if (id === 'status') fetchStatus();
 }
@@ -1314,6 +1538,7 @@ var rowVA = function(p) {
   else if (p.mode===6)  { vs=fmtDac(p)+' DAC'; vc='vadc'; }
   else if (p.mode===13) { vs='CLK '+p.pwmFreq+'Hz'; vc='vadc'; }
   else if (p.mode===14) { vs='RGB-LED'; vc='vadc'; }
+  else if (p.mode===15) { vs=p.value+' cnt @ '+(p.countHz||0)+' Hz'; vc='vadc'; }
   else if (p.mode>=7 && p.mode<=12) { vs=MN[p.mode]; vc='vadc'; }
   if (p.mode===3)  act='<button class="btn btn-sm btn-g" onclick="pinToggle('+p.gpio+')">'+(p.value?'\u25cf HI':'\u25cb LO')+'</button>';
   else if (p.mode===4)  act='<input type=range min=0 max=255 value='+p.pwmDuty+' style="width:80px;accent-color:#e67e22" oninput="pinPwmDuty('+p.gpio+',this.value)">';
@@ -1327,6 +1552,7 @@ var rowVA = function(p) {
   else if (p.mode===5)  act='<button class="btn btn-sm" onclick="pinRead('+p.gpio+')">Lesen</button>';
   else if (p.mode===13) act='<input type=number value='+p.pwmFreq+' min=1 max=40000000 style="width:90px;font-size:11px" onchange="pinClockFreq('+p.gpio+',this.value)"> Hz';
   else if (p.mode===14) act='<button class="btn btn-sm" style="background:#e91e8c;color:#fff" onclick="showTab(\'rgb\',document.getElementById(\'rgb-tab\'))">RGB-Tab</button>';
+  else if (p.mode===15) act='<button class="btn btn-sm" onclick="countReset('+p.gpio+')">Reset</button> <button class="btn btn-sm btn-b" onclick="countPulse('+p.gpio+',10)">+10</button>';
   return {vs:vs, vc:vc, act:act};
 }
 
@@ -1487,6 +1713,75 @@ var pinRead = function(gpio) {
     if (p) { p.value=d.value; p.mV=d.mV||0; }
     updateOneRow(gpio);
   });
+}
+var countReset = function(gpio) {
+  fetch('/api/count-reset',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({gpio:gpio})})
+  .then(r=>r.json()).then(function(d){
+    var p=PD.find(x=>x.gpio===gpio); if(p){p.value=0;p.countHz=0;}
+    updateOneRow(gpio);
+  });
+}
+var countPulse = function(gpio, n) {
+  var p=PD.find(x=>x.gpio===gpio);
+  var force=!!(p&&p.restricted);
+  if (force && !confirm('GPIO '+gpio+' geschuetzt. Testpulse senden?')) return;
+  fetch('/api/count-pulse',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({gpio:gpio,n:n||10,force:force})})
+  .then(r=>r.json()).then(function(d){
+    if (!d.ok) { alert('Count-Pulse: '+(d.err||'Fehler')); return; }
+    var pp=PD.find(x=>x.gpio===gpio); if(pp) pp.value=d.after;
+    updateOneRow(gpio);
+  });
+}
+
+// ── Scope ─────────────────────────────────────────────────────
+var renderScope = function() {
+  var sel=document.getElementById('sc-gpio');
+  if (!sel) return;
+  var cur=sel.value;
+  sel.innerHTML='';
+  PD.forEach(function(p){
+    if (!p.hasADC) return;
+    var o=document.createElement('option');
+    o.value=p.gpio;
+    o.text='GPIO '+p.gpio+' ('+p.label+')'+(p.adc2?' ADC2':'');
+    sel.appendChild(o);
+  });
+  if (cur) sel.value=cur;
+}
+var scopeCapture = function() {
+  var gpio=parseInt(document.getElementById('sc-gpio').value);
+  var samples=parseInt(document.getElementById('sc-n').value)||200;
+  var rate=parseInt(document.getElementById('sc-rate').value)||5000;
+  document.getElementById('sc-info').textContent='Abtasten...';
+  fetch('/api/scope?gpio='+gpio+'&samples='+samples+'&rate='+rate)
+  .then(r=>r.json()).then(function(d){
+    if (!d.ok) { document.getElementById('sc-info').textContent='Fehler: '+(d.err||'?'); return; }
+    document.getElementById('sc-info').textContent=
+      'GPIO '+d.gpio+' · '+d.samples+' Samples @ '+d.rate+' Hz · min='+d.min+' max='+d.max+' avg='+d.avg;
+    drawScope(d.data, d.min, d.max);
+  }).catch(function(){ document.getElementById('sc-info').textContent='Fehler'; });
+}
+var drawScope = function(data, vmin, vmax) {
+  var c=document.getElementById('sc-canvas');
+  if (!c || !data || !data.length) return;
+  var ctx=c.getContext('2d');
+  var w=c.width, h=c.height;
+  ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle='#21262d';
+  for (var i=1;i<4;i++){ ctx.beginPath(); ctx.moveTo(0,h*i/4); ctx.lineTo(w,h*i/4); ctx.stroke(); }
+  var span=Math.max(1, vmax-vmin);
+  ctx.strokeStyle='#58a6ff'; ctx.lineWidth=1.5; ctx.beginPath();
+  for (var i=0;i<data.length;i++){
+    var x=i/(data.length-1)*w;
+    var y=h - ((data[i]-vmin)/span)*h*0.9 - h*0.05;
+    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  ctx.fillStyle='#8b949e'; ctx.font='11px monospace';
+  ctx.fillText(String(vmax), 4, 12);
+  ctx.fillText(String(vmin), 4, h-4);
 }
 
 // ── PWM Tab ───────────────────────────────────────────────────
@@ -1682,6 +1977,7 @@ var fmtU = function(s){if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'m
         "<div class='tab' onclick='showTab(\"gpio\",this)'>&#9889; GPIO</div>"
         "<div class='tab' onclick='showTab(\"proto\",this)'>&#128260; Protokolle</div>"
         "<div class='tab' onclick='showTab(\"pwm\",this)'>&#126; PWM</div>"
+        "<div class='tab' onclick='showTab(\"scope\",this)'>&#128202; Oszi</div>"
         "<div class='tab' onclick='showTab(\"status\",this)'>&#128202; Status</div>"
         "<div class='tab' id='rgb-tab' style='display:none' onclick='showTab(\"rgb\",this)'>&#127752; RGB</div>"
         "</div>");
@@ -1729,7 +2025,7 @@ var fmtU = function(s){if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'m
 </span></h3>
 <p style='font-size:11px;color:#8b949e;margin-bottom:10px'>
 GPIO2=Onboard-LED (LOW=an). Gelbes ! = geschuetzter Pin (BOOT/USB/UART) — Schreiben nur nach Bestaetigung.
-ADC2-Pins am klassischen ESP32 sind bei aktivem WiFi unzuverlaessig. I2C/SPI-Modi verdrahten den Bus; Schreiben im Tab Protokolle.
+ADC2-Pins am klassischen ESP32 sind bei aktivem WiFi unzuverlaessig. COUNT = Flankenzaehler (FALLING, Pull-up). Oszi-Tab fuer ADC-Capture.
 </p>
 <div style='overflow-x:auto'>
 <table><thead><tr>
@@ -1826,6 +2122,24 @@ ADC2-Pins am klassischen ESP32 sind bei aktivem WiFi unzuverlaessig. I2C/SPI-Mod
 <tr><td style='color:#8b949e'>CLOCK &lt; 50Hz</td><td>Software-Toggle (micros)</td></tr>
 <tr><td style='color:#8b949e'>CLOCK &ge; 50Hz</td><td>LEDC Hardware-PWM 50% Duty</td></tr>
 </table></div></div>
+)html");
+
+    // ── Scope Pane ────────────────────────────────────────────────
+    html += F(R"html(
+<div class='pane' id='pane-scope'><div class='card'>
+<h3>ADC Mini-Oszi</h3>
+<p style='font-size:11px;color:#8b949e;margin-bottom:10px'>
+Einmalige Abtastung eines ADC-Pins. Am klassischen ESP32 ADC1 bevorzugen (GPIO32-39); ADC2 ist bei WiFi unzuverlaessig.
+</p>
+<div class='row'>
+  <label>GPIO</label><select id='sc-gpio' style='width:180px'></select>
+  <label>Samples</label><input type='number' id='sc-n' value='200' min='10' max='400' style='width:70px'>
+  <label>Rate Hz</label><input type='number' id='sc-rate' value='5000' min='100' max='20000' style='width:90px'>
+  <button class='btn btn-g' onclick='scopeCapture()'>Capture</button>
+</div>
+<canvas id='sc-canvas' width='900' height='220' style='width:100%;max-width:900px;background:#0d1117;border:1px solid #30363d;border-radius:6px;margin-top:10px'></canvas>
+<div class='rbox' id='sc-info'>&#8212;</div>
+</div></div>
 )html");
 
     // ── Status Pane ───────────────────────────────────────────────
@@ -2017,6 +2331,9 @@ void setupWebServer() {
     webServer.on("/api/spi-xfer",  HTTP_POST, handleApiSpiXfer);
     webServer.on("/api/rgb",       HTTP_POST, handleApiRgb);
     webServer.on("/api/status",    HTTP_GET,  handleApiStatus);
+    webServer.on("/api/scope",     HTTP_GET,  handleApiScope);
+    webServer.on("/api/count-reset", HTTP_POST, handleApiCountReset);
+    webServer.on("/api/count-pulse", HTTP_POST, handleApiCountPulse);
     webServer.onNotFound(handleNotFound);
     webServer.begin();
     Serial.println("[WEB] http://" + getLocalIp() + "/");
@@ -2106,6 +2423,10 @@ String buildHeartbeat() {
             io["value"] = dacVoltsFromRaw(pins[i].lastValue);
             io["unit"]  = "V";
             io["raw"]   = pins[i].lastValue;
+        } else if (pins[i].mode == PM_COUNT) {
+            io["value"] = (float)pins[i].lastValue;
+            io["freq"]  = pins[i].countHz;
+            io["unit"]  = "count";
         } else {
             io["value"] = (float)pins[i].lastValue;
         }
@@ -2199,6 +2520,7 @@ void setup() {
 
 void loop() {
     tickSoftClocks();    // Software-Takt (< 50 Hz)
+    tickEdgeCounters();  // COUNT Frequenz-Fenster
     driveOutputPins();   // OUTPUT-Pins aktiv halten
 
     // SSE: periodisch Pins pushen (auch ohne Aenderung alle 5s als Keepalive)
