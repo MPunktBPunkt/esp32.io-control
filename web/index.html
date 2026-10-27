@@ -1,0 +1,1151 @@
+<!DOCTYPE html><html lang='de'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>IO-Control</title><style><style>
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d1117;color:#e6edf3;font-family:sans-serif;font-size:13px}
+header{background:#161b22;border-bottom:1px solid #30363d;padding:12px 20px;display:flex;align-items:center;gap:10px}
+h1{font-size:17px;color:#58a6ff}
+.badge{background:rgba(88,166,255,.15);color:#58a6ff;border:1px solid rgba(88,166,255,.3);padding:2px 8px;border-radius:10px;font-size:11px}
+.tabs{display:flex;background:#161b22;border-bottom:1px solid #30363d;padding:0 16px;overflow-x:auto}
+.tab{padding:9px 18px;cursor:pointer;border-bottom:2px solid transparent;color:#8b949e;white-space:nowrap;font-weight:500;font-size:13px}
+.tab.active,.tab:hover{color:#58a6ff;border-bottom-color:#58a6ff}
+.pane{display:none;padding:18px;max-width:1000px}
+.pane.active{display:block}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px;margin-bottom:12px}
+.card h3{font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+table{width:100%;border-collapse:collapse}
+td,th{padding:6px 8px;border-bottom:1px solid #21262d;text-align:left}
+th{color:#8b949e;font-weight:500;font-size:11px}
+select,input[type=text],input[type=number]{background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:4px;padding:4px 6px;font-size:12px}
+.btn{background:#21262d;color:#e6edf3;border:1px solid #30363d;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px}
+.btn:hover{background:#30363d}
+.btn-g{background:#238636;border-color:#2ea043;color:#fff}.btn-g:hover{background:#2ea043}
+.btn-b{background:#1f6feb;border-color:#388bfd;color:#fff}.btn-b:hover{background:#388bfd}
+.btn-r{background:#b91c1c;border-color:#ef4444;color:#fff}
+.btn-sm{padding:2px 7px;font-size:11px}
+.mono{font-family:monospace;color:#58a6ff}
+.vhi{color:#3fb950;font-weight:bold}.vlo{color:#8b949e}.vadc{color:#a371f7}.vwarn{color:#e3b341}
+.seg{display:inline-flex;border:1px solid #30363d;border-radius:6px;overflow:hidden;margin-left:8px}
+.seg button{background:#0d1117;color:#8b949e;border:0;padding:3px 10px;font-size:11px;cursor:pointer}
+.seg button.on{background:#1f6feb;color:#fff}
+.dmm-main{font-size:42px;font-weight:700;font-family:monospace;color:#58a6ff;letter-spacing:1px;margin:8px 0}
+.dmm-sub{font-size:12px;color:#8b949e;font-family:monospace;min-height:18px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:600px){.grid2{grid-template-columns:1fr}}
+textarea{background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:4px;padding:6px;font-family:monospace;font-size:12px;width:100%;resize:vertical}
+.rbox{background:#0d1117;border:1px solid #30363d;border-radius:4px;padding:8px;font-family:monospace;font-size:12px;min-height:40px;color:#3fb950;margin-top:8px;white-space:pre-wrap}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+label{font-size:12px;color:#8b949e;white-space:nowrap}
+#bsvg{width:100%;max-width:1000px;display:block;margin:0 auto}
+.pc{cursor:pointer;transition:filter .15s}.pc:hover{filter:brightness(1.5)}
+
+</style></style></head><body><header><h1>&#9889; <span id='hdr-name'>IO-Control</span></h1><span class='badge'>&#127757; <span id='hdr-ver'>…</span></span><span class='badge' id='hbb'>&#128154;</span></header><div class='tabs'><div class='tab active' onclick='showTab("board",this)'>&#128204; Board</div><div class='tab' onclick='showTab("gpio",this)'>&#9889; GPIO</div><div class='tab' onclick='showTab("proto",this)'>&#128260; Protokolle</div><div class='tab' onclick='showTab("pwm",this)'>&#126; PWM</div><div class='tab' onclick='showTab("clock",this)'>&#128336; Takt</div><div class='tab' onclick='showTab("dmm",this)'>&#128207; DMM</div><div class='tab' onclick='showTab("scope",this)'>&#128202; Oszi</div><div class='tab' onclick='showTab("status",this)'>&#128202; Status</div><div class='tab' id='rgb-tab' style='display:none' onclick='showTab("rgb",this)'>&#127752; RGB</div></div>
+<div class='pane active' id='pane-board'><div class='card'>
+<h3 id='board-title'>&#128204; Wemos D1 Mini ESP32 &mdash; Pinout</h3>
+<svg id='bsvg' viewBox='0 0 800 300' xmlns='http://www.w3.org/2000/svg'>
+  <g id='svgPCB'>
+    <!-- ESP32 PCB: schmales Board, 4 Spalten eng -->
+    <rect x='200' y='5' width='400' height='285' rx='6' fill='#1a4d2e' stroke='#0d3b22' stroke-width='2'/>
+    <rect x='212' y='50' width='175' height='160' rx='4' fill='#111' stroke='#444' stroke-width='1.5'/>
+    <text x='299' y='122' text-anchor='middle' fill='#555' font-family='monospace' font-size='9'>ESPRESSIF</text>
+    <text x='299' y='133' text-anchor='middle' fill='#444' font-family='monospace' font-size='7'>ESP32-WROOM-32</text>
+    <text x='299' y='143' text-anchor='middle' fill='#2a6' font-family='monospace' font-size='6'>WiFi+BT</text>
+    <rect x='330' y='52' width='42' height='20' rx='2' fill='none' stroke='#2a5' stroke-width='1' stroke-dasharray='3,2'/>
+    <text x='351' y='66' text-anchor='middle' fill='#2a5' font-family='sans-serif' font-size='5'>ANT</text>
+    <rect x='430' y='185' width='45' height='35' rx='3' fill='#162' stroke='#0a3' stroke-width='0.8' opacity='0.7'/>
+    <text x='452' y='206' text-anchor='middle' fill='#0a3' font-family='monospace' font-size='5'>CP2102</text>
+    <rect x='530' y='230' width='52' height='24' rx='3' fill='#555' stroke='#888'/>
+    <text x='556' y='246' text-anchor='middle' fill='#bbb' font-family='sans-serif' font-size='6'>USB</text>
+    <rect x='530' y='14' width='20' height='12' rx='2' fill='#333' stroke='#666'/>
+    <text x='540' y='23' text-anchor='middle' fill='#888' font-family='sans-serif' font-size='5'>RST</text>
+    <circle cx='510' cy='20' r='4' fill='#1a4' stroke='#0d3' stroke-width='1'/>
+    <text x='510' y='31' text-anchor='middle' fill='#2a6' font-family='sans-serif' font-size='5'>LED</text>
+    <!-- Pin-Streifen: 2 Reihen links, 2 Reihen rechts -->
+    <line x1='200' y1='14' x2='200' y2='270' stroke='#0d3b22' stroke-width='10' stroke-dasharray='4,18'/>
+    <line x1='213' y1='14' x2='213' y2='270' stroke='#0d3b22' stroke-width='10' stroke-dasharray='4,18'/>
+    <line x1='587' y1='14' x2='587' y2='270' stroke='#0d3b22' stroke-width='10' stroke-dasharray='4,18'/>
+    <line x1='600' y1='14' x2='600' y2='270' stroke='#0d3b22' stroke-width='10' stroke-dasharray='4,18'/>
+  </g>
+</svg>
+<div id='bleg' style='display:flex;flex-wrap:wrap;gap:8px;margin-top:10px'></div>
+</div></div>
+
+<div class='pane' id='pane-gpio'><div class='card'>
+<h3>GPIO Konfiguration
+<span class='seg'>
+<button data-u='raw' class='on' onclick='setUnitMode("raw")'>Raw</button>
+<button data-u='volt' onclick='setUnitMode("volt")'>Volt</button>
+</span></h3>
+<p style='font-size:11px;color:#8b949e;margin-bottom:10px'>
+GPIO2=Onboard-LED (LOW=an). Gelbes ! = geschuetzter Pin (BOOT/USB/UART) — Schreiben nur nach Bestaetigung.
+ADC2-Pins am klassischen ESP32 sind bei aktivem WiFi unzuverlaessig. COUNT = Flankenzaehler (FALLING, Pull-up). Oszi-Tab fuer ADC-Capture.
+</p>
+<div style='overflow-x:auto'>
+<table><thead><tr>
+<th>GPIO</th><th>Label</th><th>Modus</th><th>Wert</th><th>Aktion</th>
+</tr></thead>
+<tbody id='gtb'><tr><td colspan='5' style='color:#555;text-align:center'>Verbinde SSE...</td></tr></tbody>
+</table></div></div></div>
+
+<div class='pane' id='pane-proto'><div class='grid2'>
+<div class='card'><h3>&#128260; I2C</h3>
+<div class='row'>
+  <label>SDA</label><input type='number' id='i2c-sda' value='21' style='width:55px'>
+  <label>SCL</label><input type='number' id='i2c-scl' value='22' style='width:55px'>
+  <button class='btn btn-b' onclick='i2cInit()'>Init</button>
+</div>
+<button class='btn btn-g' style='width:100%;margin-bottom:8px' onclick='i2cScan()'>&#128269; Scanner</button>
+<div class='rbox' id='i2c-sr'>&#8212;</div>
+<hr style='border-color:#21262d;margin:12px 0'>
+<div class='row'>
+  <label>Addr</label><input type='text' id='i2c-wa' value='0x3C' style='width:65px'>
+  <label>Reg</label><input type='text' id='i2c-wr' value='-1' style='width:45px'>
+</div>
+<label>Write Bytes (hex: 00 FF A0)</label>
+<textarea id='i2c-wd' rows='2' placeholder='00 FF...'></textarea>
+<button class='btn btn-g' style='margin-top:6px' onclick='i2cWrite()'>&#128228; Schreiben</button>
+<div class='rbox' id='i2c-wres'>&#8212;</div>
+<hr style='border-color:#21262d;margin:12px 0'>
+<div class='row'>
+  <label>Addr</label><input type='text' id='i2c-ra' value='0x3C' style='width:65px'>
+  <label>Reg</label><input type='text' id='i2c-rr' value='0x00' style='width:45px'>
+  <label>Len</label><input type='number' id='i2c-rl' value='4' style='width:50px'>
+</div>
+<button class='btn btn-b' onclick='i2cRead()'>&#128229; Lesen</button>
+<div class='rbox' id='i2c-rres'>&#8212;</div>
+</div>
+<div class='card'><h3>&#128299; SPI (VSPI)</h3>
+<div class='row'>
+  <label>MOSI</label><input type='number' id='spi-mo' value='23' style='width:50px'>
+  <label>MISO</label><input type='number' id='spi-mi' value='19' style='width:50px'>
+</div>
+<div class='row'>
+  <label>SCK</label><input type='number' id='spi-sc' value='18' style='width:50px'>
+  <label>CS</label><input type='number' id='spi-cs' value='5' style='width:50px'>
+</div>
+<div class='row'>
+  <label>Freq Hz</label><input type='number' id='spi-fr' value='1000000' style='width:110px'>
+</div>
+<button class='btn btn-b' style='margin-bottom:8px' onclick='spiInit()'>Init SPI</button>
+<span id='spi-st' style='margin-left:8px;font-size:11px;color:#8b949e'></span>
+<hr style='border-color:#21262d;margin:12px 0'>
+<label>TX Bytes (hex: 9F 00 00)</label>
+<textarea id='spi-tx' rows='2' placeholder='9F 00 00'></textarea>
+<div class='row' style='margin-top:6px'>
+  <label>CS Override (-1=default)</label>
+  <input type='number' id='spi-co' value='-1' style='width:55px'>
+</div>
+<button class='btn btn-g' onclick='spiXfer()'>&#9889; Transfer</button>
+<div class='rbox' id='spi-res'>&#8212;</div>
+</div></div></div>
+
+<div class='pane' id='pane-pwm'>
+<div class='card'><h3>&#126; PWM / LEDC</h3>
+<div class='row'>
+  <label>GPIO</label>
+  <select id='pwm-gpio' style='width:165px'></select>
+  <label>Freq Hz</label>
+  <input type='number' id='pwm-fr' value='1000' style='width:95px'>
+</div>
+<div class='row' style='align-items:center'>
+  <label>Duty 0-255</label>
+  <input type='range' id='pwm-dr' min='0' max='255' value='128' style='flex:1;accent-color:#e67e22'
+    oninput='document.getElementById("pwm-dn").value=this.value'>
+  <input type='number' id='pwm-dn' value='128' min='0' max='255' style='width:55px'
+    oninput='document.getElementById("pwm-dr").value=this.value'>
+</div>
+<div class='row' style='margin-top:4px'>
+  <button class='btn btn-g' onclick='setPwm()'>&#9889; Starten</button>
+  <button class='btn btn-r' onclick='stopPwm()' style='margin-left:6px'>&#9632; Stoppen</button>
+</div>
+<div class='rbox' id='pwm-res'>&#8212;</div>
+<hr style='border-color:#21262d;margin:14px 0'>
+<h3 style='margin-bottom:8px'>Aktive PWM-Pins</h3>
+<div id='pwm-list'>&#8212;</div>
+</div>
+<div class='card'><h3>&#9432; Info</h3>
+<table>
+<tr><td style='color:#8b949e'>Max. Freq</td><td>~40 MHz (8-bit LEDC)</td></tr>
+<tr><td style='color:#8b949e'>CLOCK &lt; 50Hz</td><td>Software-Toggle (micros)</td></tr>
+<tr><td style='color:#8b949e'>CLOCK &ge; 50Hz</td><td>LEDC Hardware-PWM 50% Duty</td></tr>
+</table></div></div>
+
+<div class='pane' id='pane-clock'><div class='card'>
+<h3>Taktgenerator</h3>
+<p style='font-size:11px;color:#8b949e;margin-bottom:10px'>
+Rechteck 50% Duty. &lt;50&nbsp;Hz Software-Toggle, ab 50&nbsp;Hz LEDC-Hardware.
+Sinnvoller Arbeitsbereich ca. 1&nbsp;Hz–einige MHz (theoretisch bis ~40&nbsp;MHz).
+</p>
+<div class='row'>
+  <label>GPIO</label><select id='ck-gpio' style='width:180px'></select>
+  <label>Freq Hz</label><input type='number' id='ck-fr' value='1000' min='1' max='40000000' style='width:120px'>
+  <button class='btn btn-g' onclick='clockStart()'>Start</button>
+  <button class='btn btn-r' onclick='clockStop()'>Stop</button>
+</div>
+<div class='rbox' id='ck-res'>&#8212;</div>
+<hr style='border-color:#21262d;margin:14px 0'>
+<h3 style='margin-bottom:8px'>Aktive Takte</h3>
+<div id='ck-list'>&#8212;</div>
+</div></div>
+
+<div class='pane' id='pane-dmm'><div class='card'>
+<h3>Digital Multimeter</h3>
+<p id='dmm-hint' style='font-size:11px;color:#8b949e;margin-bottom:10px'>ADC-Spannung 0–3.3 V</p>
+<div class='row'>
+  <label>Methode</label>
+  <select id='dmm-method' onchange='dmmApplyMethodFilter()' style='width:130px'>
+    <option value='volt'>Spannung</option>
+    <option value='logic'>Logik</option>
+    <option value='freq'>Frequenz</option>
+    <option value='period'>Periode</option>
+    <option value='duty'>Duty</option>
+    <option value='count'>Counter</option>
+  </select>
+  <label>GPIO</label><select id='dmm-gpio' style='width:180px'></select>
+  <button class='btn btn-g' onclick='dmmReadOnce()'>Messen</button>
+  <button class='btn btn-b' id='dmm-hold' onclick='dmmToggleHold()'>Hold (0.5s)</button>
+</div>
+<div class='dmm-main' id='dmm-main'>—</div>
+<div class='dmm-sub' id='dmm-sub'>Bereit</div>
+</div>
+<div class='card'><h3>Hinweise</h3>
+<table>
+<tr><td style='color:#8b949e'>Spannung</td><td>ADC, 0–3.3&nbsp;V · Min/Avg/Max aus 24 Samples</td></tr>
+<tr><td style='color:#8b949e'>Logik</td><td>HIGH/LOW mit Pull-up</td></tr>
+<tr><td style='color:#8b949e'>Freq/Period/Duty</td><td>pulseIn am Pin (Rechteck noetig)</td></tr>
+<tr><td style='color:#8b949e'>Counter</td><td>1&nbsp;s Interrupt-Fenster (FALLING)</td></tr>
+<tr><td style='color:#8b949e'>Ohne Extra-HW</td><td>kein Strom/Widerstand (Shunt/Teiler noetig)</td></tr>
+</table></div></div>
+
+<div class='pane' id='pane-scope'><div class='card'>
+<h3>ADC Mini-Oszi</h3>
+<p style='font-size:11px;color:#8b949e;margin-bottom:10px'>
+Einmalige Abtastung eines ADC-Pins. Am klassischen ESP32 ADC1 bevorzugen (GPIO32-39); ADC2 ist bei WiFi unzuverlaessig.
+</p>
+<div class='row'>
+  <label>GPIO</label><select id='sc-gpio' style='width:180px'></select>
+  <label>Samples</label><input type='number' id='sc-n' value='200' min='10' max='400' style='width:70px'>
+  <label>Rate Hz</label><input type='number' id='sc-rate' value='5000' min='100' max='20000' style='width:90px'>
+  <button class='btn btn-g' onclick='scopeCapture()'>Capture</button>
+</div>
+<canvas id='sc-canvas' width='900' height='220' style='width:100%;max-width:900px;background:#0d1117;border:1px solid #30363d;border-radius:6px;margin-top:10px'></canvas>
+<div class='rbox' id='sc-info'>&#8212;</div>
+</div></div>
+<div class='pane' id='pane-status'><div class='card'><h3>&#128202; Systeminfo</h3><table><tr><td style='color:#8b949e'>Name</td><td><span id='hdr-name'>IO-Control</span></td></tr><tr><td style='color:#8b949e'>Chip</td><td><span id='st-chip'>-</span></td></tr><tr><td style='color:#8b949e'>MAC</td><td class='mono'><span id='st-mac' class='mono'>-</span></td></tr>
+<tr><td style='color:#8b949e'>IP</td><td class='mono' id='st-ip'>-</td></tr>
+<tr><td style='color:#8b949e'>mDNS</td><td class='mono' id='st-mdns'>-</td></tr>
+<tr><td style='color:#8b949e'>RSSI</td><td id='st-rs'>-</td></tr>
+<tr><td style='color:#8b949e'>Uptime</td><td id='st-up'>-</td></tr>
+<tr><td style='color:#8b949e'>Heap</td><td id='st-hp'>-</td></tr>
+<tr><td style='color:#8b949e'>Flash</td><td id='st-fl'>-</td></tr>
+<tr><td style='color:#8b949e'>I2C</td><td id='st-i2'>-</td></tr>
+<tr><td style='color:#8b949e'>SPI</td><td id='st-sp'>-</td></tr>
+</table></div>
+<div class='card'><h3>&#128640; OTA Update</h3>
+<a href='/ota' class='btn btn-g' style='text-decoration:none;display:inline-block'>&#128640; OTA Update</a>
+</div></div>
+
+<div class='pane' id='pane-rgb'>
+<div class='card'><h3>&#127752; RGB-LED Steuerung</h3>
+<p style='font-size:11px;color:#8b949e;margin-bottom:12px'>
+WS2812 an IO38 &mdash; neopixelWrite() &mdash; kein separates Library noetig (Core 3.x)</p>
+<div class='row'>
+  <label>Rot</label>
+  <input type='range' id='rgb-r' min='0' max='255' value='0' style='flex:1;accent-color:#e74c3c'
+    oninput='document.getElementById("rv").textContent=this.value;rgbPreview()'>
+  <span id='rv' style='width:28px;text-align:right;font-family:monospace'>0</span>
+</div>
+<div class='row'>
+  <label>Gruen</label>
+  <input type='range' id='rgb-g' min='0' max='255' value='0' style='flex:1;accent-color:#2ecc71'
+    oninput='document.getElementById("gv").textContent=this.value;rgbPreview()'>
+  <span id='gv' style='width:28px;text-align:right;font-family:monospace'>0</span>
+</div>
+<div class='row'>
+  <label>Blau</label>
+  <input type='range' id='rgb-b' min='0' max='255' value='0' style='flex:1;accent-color:#3498db'
+    oninput='document.getElementById("bv").textContent=this.value;rgbPreview()'>
+  <span id='bv' style='width:28px;text-align:right;font-family:monospace'>0</span>
+</div>
+<div class='row' style='margin-top:8px;align-items:center'>
+  <div id='rgb-prev' style='width:48px;height:48px;border-radius:50%;border:2px solid #30363d;background:#000;margin-right:8px'></div>
+  <div style='display:flex;flex-direction:column;gap:6px;flex:1'>
+    <button class='btn btn-g' onclick='rgbSend()'>&#9889; Senden</button>
+    <button class='btn' onclick='rgbOff()'>&#9632; Aus (0,0,0)</button>
+  </div>
+</div>
+<hr style='border-color:#21262d;margin:14px 0'>
+<h3 style='margin-bottom:8px'>Schnellfarben</h3>
+<div style='display:flex;flex-wrap:wrap;gap:8px'>
+  <button class='btn' style='background:#e00' onclick='rgbSet(255,0,0)'>Rot</button>
+  <button class='btn' style='background:#0a0' onclick='rgbSet(0,255,0)'>Gruen</button>
+  <button class='btn' style='background:#00c' onclick='rgbSet(0,0,255)'>Blau</button>
+  <button class='btn' style='background:#880' onclick='rgbSet(255,255,0)'>Gelb</button>
+  <button class='btn' style='background:#088' onclick='rgbSet(0,255,255)'>Cyan</button>
+  <button class='btn' style='background:#808' onclick='rgbSet(255,0,255)'>Magenta</button>
+  <button class='btn' style='background:#fff;color:#000' onclick='rgbSet(255,255,255)'>Weiss</button>
+  <button class='btn' style='background:#f80' onclick='rgbSet(255,128,0)'>Orange</button>
+  <button class='btn' style='background:#048' onclick='rgbSet(0,64,128)'>Dunkelblau</button>
+</div>
+<div class='rbox' id='rgb-res' style='margin-top:10px'>&#8212;</div>
+</div></div>
+<script>
+
+function applyHdr(d){
+  var n=document.getElementById('hdr-name'); if(n&&d.name) n.textContent=d.name;
+  var v=document.getElementById('hdr-ver'); if(v&&d.version) v.textContent=d.version;
+  var c=document.getElementById('st-chip'); if(c) c.textContent=d.chip||d.chipModel||'-';
+  var m=document.getElementById('st-mac'); if(m) m.textContent=d.mac||'-';
+  var hw=document.getElementById('st-hw'); if(hw&&d.hwSummary) hw.textContent=d.hwSummary;
+  var cpu=document.getElementById('st-cpu'); if(cpu){
+    var t=(typeof d.cpu==='number'?d.cpu+'%':'—');
+    if(typeof d.cpu0==='number'&&typeof d.cpu1==='number') t='Ø '+d.cpu+'% (CPU0 '+d.cpu0+'% · CPU1 '+d.cpu1+'%)';
+    else if(typeof d.cpu0==='number') t=d.cpu0+'%';
+    cpu.textContent=t;
+  }
+  var fl=document.getElementById('st-flash'); if(fl&&d.flashRealMb) fl.textContent=d.flashRealMb+' MiB';
+}
+
+var MN=['DISABLED','INPUT','INPUT_PU','OUTPUT','PWM','ADC','DAC',
+        'I2C_SDA','I2C_SCL','SPI_MOSI','SPI_MISO','SPI_SCK','SPI_CS','CLOCK','RGB','COUNT'];
+var MC=['#444','#2ecc71','#27ae60','#e74c3c','#e67e22','#9b59b6','#8e44ad',
+        '#3498db','#2980b9','#1abc9c','#16a085','#17a589','#0e6655','#f39c12','#e91e8c','#f1c40f'];
+
+// Board layout: ViewBox 1000x300
+// 4 Spalten × 10 Reihen nach echtem Wemos D1 Mini ESP32 Pinout
+// OL=outer-left x=55, IL=inner-left x=130
+// ── ESP32 (Wemos D1 Mini): 4 Spalten x 10 Reihen ─────────────
+var LY_ESP32=[
+  // IL inner-left
+  {g:-1, lb:'RST',  s:'IL',row:0, sp:'#7f8c8d'},
+  {g:36, lb:'SVP',  s:'IL',row:1},
+  {g:26, lb:'IO26', s:'IL',row:2},
+  {g:18, lb:'IO18', s:'IL',row:3},
+  {g:19, lb:'IO19', s:'IL',row:4},
+  {g:23, lb:'IO23', s:'IL',row:5},
+  {g:5,  lb:'IO5',  s:'IL',row:6},
+  {g:-2, lb:'3V3',  s:'IL',row:7, sp:'#c0392b'},
+  {g:13, lb:'IO13', s:'IL',row:8},
+  {g:-3, lb:'SD3',  s:'IL',row:9, sp:'#5d2e2e'},
+  // OL outer-left
+  {g:-4, lb:'GND',  s:'OL',row:0, sp:'#2c3e50'},
+  {g:-5, lb:'NC',   s:'OL',row:1, sp:'#444'},
+  {g:39, lb:'SVN',  s:'OL',row:2},
+  {g:35, lb:'IO35', s:'OL',row:3},
+  {g:33, lb:'IO33', s:'OL',row:4},
+  {g:34, lb:'IO34', s:'OL',row:5},
+  {g:14, lb:'IO14', s:'OL',row:6},
+  {g:-6, lb:'NC',   s:'OL',row:7, sp:'#444'},
+  {g:-7, lb:'SD2',  s:'OL',row:8, sp:'#5d2e2e'},
+  {g:-8, lb:'CMD',  s:'OL',row:9, sp:'#5d2e2e'},
+  // IR inner-right
+  {g:1,  lb:'TX0',  s:'IR',row:0},
+  {g:3,  lb:'RX0',  s:'IR',row:1},
+  {g:22, lb:'IO22', s:'IR',row:2},
+  {g:21, lb:'IO21', s:'IR',row:3},
+  {g:17, lb:'IO17', s:'IR',row:4},
+  {g:16, lb:'IO16', s:'IR',row:5},
+  {g:-9, lb:'GND',  s:'IR',row:6, sp:'#2c3e50'},
+  {g:-10,lb:'+5V',  s:'IR',row:7, sp:'#c0392b'},
+  {g:15, lb:'IO15', s:'IR',row:8},
+  {g:-11,lb:'SD0',  s:'IR',row:9, sp:'#5d2e2e'},
+  // OR outer-right
+  {g:-12,lb:'GND',  s:'OR',row:0, sp:'#2c3e50'},
+  {g:27, lb:'IO27', s:'OR',row:1},
+  {g:25, lb:'IO25', s:'OR',row:2},
+  {g:32, lb:'IO32', s:'OR',row:3},
+  {g:12, lb:'IO12', s:'OR',row:4},
+  {g:4,  lb:'IO4',  s:'OR',row:5},
+  {g:0,  lb:'IO0',  s:'OR',row:6},
+  {g:2,  lb:'IO2',  s:'OR',row:7},
+  {g:-13,lb:'SD1',  s:'OR',row:8, sp:'#5d2e2e'},
+  {g:-14,lb:'CLK',  s:'OR',row:9, sp:'#5d2e2e'}
+];
+
+// ── ESP32-S3 Dev Module: 2 Spalten x 22 Reihen ────────────────
+// Linke Seite (s:'L'), rechte Seite (s:'R')
+var LY_S3=[
+  // Linke Seite (von oben)
+  {g:-1, lb:'3V3',  s:'L',row:0,  sp:'#c0392b'},
+  {g:-2, lb:'3V3',  s:'L',row:1,  sp:'#c0392b'},
+  {g:-3, lb:'RST',  s:'L',row:2,  sp:'#7f8c8d'},
+  {g:4,  lb:'IO4',  s:'L',row:3},
+  {g:5,  lb:'IO5',  s:'L',row:4},
+  {g:6,  lb:'IO6',  s:'L',row:5},
+  {g:7,  lb:'IO7',  s:'L',row:6},
+  {g:15, lb:'IO15', s:'L',row:7},
+  {g:16, lb:'IO16', s:'L',row:8},
+  {g:17, lb:'IO17', s:'L',row:9},
+  {g:18, lb:'IO18', s:'L',row:10},
+  {g:8,  lb:'IO8',  s:'L',row:11},
+  {g:3,  lb:'IO3',  s:'L',row:12},
+  {g:46, lb:'IO46', s:'L',row:13},
+  {g:9,  lb:'IO9',  s:'L',row:14},
+  {g:10, lb:'IO10', s:'L',row:15},
+  {g:11, lb:'IO11', s:'L',row:16},
+  {g:12, lb:'IO12', s:'L',row:17},
+  {g:13, lb:'IO13', s:'L',row:18},
+  {g:14, lb:'IO14', s:'L',row:19},
+  {g:-4, lb:'5V',   s:'L',row:20, sp:'#c0392b'},
+  {g:-5, lb:'GND',  s:'L',row:21, sp:'#2c3e50'},
+  // Rechte Seite (von oben)
+  {g:-6, lb:'GND',  s:'R',row:0,  sp:'#2c3e50'},
+  {g:43, lb:'TX0',  s:'R',row:1},
+  {g:44, lb:'RX0',  s:'R',row:2},
+  {g:1,  lb:'IO1',  s:'R',row:3},
+  {g:2,  lb:'IO2',  s:'R',row:4},
+  {g:42, lb:'IO42', s:'R',row:5},
+  {g:41, lb:'IO41', s:'R',row:6},
+  {g:40, lb:'IO40', s:'R',row:7},
+  {g:39, lb:'IO39', s:'R',row:8},
+  {g:38, lb:'IO38\u25cf',s:'R',row:9, rgb:true},  // RGB-LED
+  {g:37, lb:'IO37', s:'R',row:10},
+  {g:36, lb:'IO36', s:'R',row:11},
+  {g:35, lb:'IO35', s:'R',row:12},
+  {g:0,  lb:'IO0',  s:'R',row:13},
+  {g:45, lb:'IO45', s:'R',row:14},
+  {g:48, lb:'IO48', s:'R',row:15},
+  {g:47, lb:'IO47', s:'R',row:16},
+  {g:21, lb:'IO21', s:'R',row:17},
+  {g:20, lb:'IO20', s:'R',row:18},
+  {g:19, lb:'IO19', s:'R',row:19},
+  {g:-7, lb:'GND',  s:'R',row:20, sp:'#2c3e50'},
+  {g:-8, lb:'GND',  s:'R',row:21, sp:'#2c3e50'}
+];
+
+// SVG PCB-Inhalte fuer Board-Wechsel
+var SVG_32_INNER = '<rect x="148" y="5" width="704" height="285" rx="6" fill="#1a4d2e" stroke="#0d3b22" stroke-width="2"/><rect x="165" y="55" width="230" height="170" rx="4" fill="#111" stroke="#444" stroke-width="1.5"/><text x="280" y="132" text-anchor="middle" fill="#555" font-family="monospace" font-size="10">ESPRESSIF</text><text x="280" y="145" text-anchor="middle" fill="#444" font-family="monospace" font-size="8">ESP32-WROOM-32</text><text x="280" y="157" text-anchor="middle" fill="#2a6" font-family="monospace" font-size="7">WiFi+BT</text><rect x="340" y="57" width="52" height="24" rx="2" fill="none" stroke="#2a5" stroke-width="1" stroke-dasharray="3,2"/><text x="366" y="73" text-anchor="middle" fill="#2a5" font-family="sans-serif" font-size="6">ANT</text><rect x="580" y="190" width="60" height="45" rx="3" fill="#162" stroke="#0a3" stroke-width="0.8" opacity="0.7"/><text x="610" y="217" text-anchor="middle" fill="#0a3" font-family="monospace" font-size="6">CP2102</text><rect x="770" y="240" width="70" height="32" rx="3" fill="#555" stroke="#888"/><rect x="775" y="244" width="60" height="24" rx="2" fill="#333"/><text x="805" y="260" text-anchor="middle" fill="#bbb" font-family="sans-serif" font-size="7">USB</text><rect x="760" y="14" width="24" height="14" rx="3" fill="#333" stroke="#666"/><text x="772" y="24" text-anchor="middle" fill="#888" font-family="sans-serif" font-size="6">RST</text><circle cx="720" cy="21" r="5" fill="#1a4" stroke="#0d3" stroke-width="1"/><text x="720" y="34" text-anchor="middle" fill="#2a6" font-family="sans-serif" font-size="6">LED</text><line x1="148" y1="18" x2="148" y2="270" stroke="#0d3b22" stroke-width="14" stroke-dasharray="5,17"/><line x1="165" y1="18" x2="165" y2="270" stroke="#0d3b22" stroke-width="14" stroke-dasharray="5,17"/><line x1="835" y1="18" x2="835" y2="270" stroke="#0d3b22" stroke-width="14" stroke-dasharray="5,17"/><line x1="852" y1="18" x2="852" y2="270" stroke="#0d3b22" stroke-width="14" stroke-dasharray="5,17"/>';
+
+var SVG_S3_INNER = '<rect x="290" y="5" width="420" height="505" rx="6" fill="#1a1a3e" stroke="#111133" stroke-width="2"/><rect x="310" y="25" width="200" height="200" rx="4" fill="#111" stroke="#444" stroke-width="1.5"/><text x="410" y="115" text-anchor="middle" fill="#555" font-family="monospace" font-size="10">ESPRESSIF</text><text x="410" y="128" text-anchor="middle" fill="#444" font-family="monospace" font-size="8">ESP32-S3-WROOM-1</text><text x="410" y="140" text-anchor="middle" fill="#48f" font-family="monospace" font-size="7">WiFi+BT+USB</text><rect x="430" y="27" width="78" height="28" rx="2" fill="none" stroke="#2a5" stroke-width="1" stroke-dasharray="3,2"/><text x="469" y="45" text-anchor="middle" fill="#2a5" font-family="sans-serif" font-size="6">ANTENNA</text><circle cx="475" cy="310" r="8" fill="#200" stroke="#f00" stroke-width="1.5"/><circle cx="475" cy="310" r="4" fill="#300" stroke="#0f0" stroke-width="1"/><circle cx="475" cy="310" r="1.5" fill="#030"/><text x="475" y="326" text-anchor="middle" fill="#f55" font-family="sans-serif" font-size="6">RGB@38</text><rect x="380" y="450" width="55" height="25" rx="3" fill="#555" stroke="#888"/><text x="407" y="466" text-anchor="middle" fill="#bbb" font-family="sans-serif" font-size="6">UART</text><rect x="460" y="450" width="55" height="25" rx="3" fill="#555" stroke="#888"/><text x="487" y="466" text-anchor="middle" fill="#bbb" font-family="sans-serif" font-size="6">USB</text><rect x="415" y="360" width="36" height="22" rx="2" fill="#333" stroke="#666"/><text x="433" y="375" text-anchor="middle" fill="#888" font-family="sans-serif" font-size="5">BOOT</text><rect x="465" y="360" width="36" height="22" rx="2" fill="#333" stroke="#666"/><text x="483" y="375" text-anchor="middle" fill="#888" font-family="sans-serif" font-size="5">RST</text><line x1="290" y1="12" x2="290" y2="493" stroke="#111133" stroke-width="12" stroke-dasharray="5,16"/><line x1="710" y1="12" x2="710" y2="493" stroke="#111133" stroke-width="12" stroke-dasharray="5,16"/>';
+var BOARD = 'esp32';
+var RGB_GPIO = -1;
+var UNIT_MODE = localStorage.getItem('ioc_unit') || 'raw'; // 'raw' | 'volt'
+var BUS = {i2cSda:21,i2cScl:22,spiMosi:23,spiMiso:19,spiSck:18,spiCs:5};
+
+// Layout-Koordinaten ESP32 (4-spaltig, schmales PCB 200..600, viewBox 800x300)
+var CX_32  = {OL:30,  IL:90,  IR:710, OR:770};
+var LX_32  = {OL:{x:20,a:'end'}, IL:{x:80,a:'end'}, IR:{x:720,a:'start'}, OR:{x:780,a:'start'}};
+var PE_32  = {OL:200, IL:200, IR:600, OR:600};
+// Layout-Koordinaten S3 (2-spaltig, 22 Zeilen)
+var CX_S3L = 280, CX_S3R = 720;
+var VB_S3  = '0 0 1000 520';
+var VB_32  = '0 0 800 300';
+
+var py32 = function(r){ return 18 + r*28; }
+var pyS3 = function(r){ return 12 + r*23; }
+
+var PD = [];
+
+// Tab wechseln
+var showTab = function(id, el) {
+  document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('pane-' + id).classList.add('active');
+  el.classList.add('active');
+  if (id === 'board')  renderBoard();
+  if (id === 'gpio')   { fetch('/api/pins').then(r=>r.json()).then(d=>{PD=d;renderGpio();}); }
+  if (id === 'pwm')    { fetch('/api/pins').then(function(r){return r.json();}).then(function(d){applyHdr(d);PD=d;renderPwm();}); }
+  if (id === 'clock')  { fetch('/api/pins').then(function(r){return r.json();}).then(function(d){PD=d;renderClock();}); }
+  if (id === 'dmm')    { fetch('/api/pins').then(function(r){return r.json();}).then(function(d){PD=d;renderDmm();}); }
+  if (id === 'scope')  { fetch('/api/pins').then(function(r){return r.json();}).then(function(d){PD=d;renderScope();}); }
+  if (id === 'rgb')    rgbPreview();
+  if (id === 'status') fetchStatus();
+}
+
+// ── Board SVG ─────────────────────────────────────────────────
+var renderBoard = function() {
+  var svg = document.getElementById('bsvg');
+  svg.querySelectorAll('.dyn').forEach(e => e.remove());
+  var pm = {}; PD.forEach(p => pm[p.gpio] = p);
+  var ns = 'http://www.w3.org/2000/svg';
+
+  if (BOARD === 'esp32s3') {
+    renderBoardS3(svg, pm, ns);
+  } else {
+    renderBoard32(svg, pm, ns);
+  }
+
+  // Legende
+  var leg = document.getElementById('bleg');
+  leg.innerHTML = '';
+  MN.forEach(function(n, i) {
+    if (i === 0 || PD.some(p => p.mode === i)) {
+      var sp = document.createElement('span');
+      sp.style.cssText = 'font-size:11px;color:#8b949e;display:flex;align-items:center;gap:4px';
+      sp.innerHTML = '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + MC[i] + ';"></span>' + n;
+      leg.appendChild(sp);
+    }
+  });
+  if (BOARD === 'esp32') {
+    var fw = document.createElement('span');
+    fw.style.cssText = 'font-size:11px;color:#a55;display:flex;align-items:center;gap:4px';
+    fw.innerHTML = '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#5d2e2e;"></span>FLASH';
+    leg.appendChild(fw);
+  }
+  if (RGB_GPIO >= 0) {
+    var rg = document.createElement('span');
+    rg.style.cssText = 'font-size:11px;color:#e74c3c;display:flex;align-items:center;gap:4px';
+    rg.innerHTML = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,#f00,#0f0,#00f);"></span>RGB-LED (IO38)';
+    leg.appendChild(rg);
+  }
+}
+
+// ── ESP32 Board rendern (4 Spalten) ──────────────────────────
+var renderBoard32 = function(svg, pm, ns) {
+  LY_ESP32.forEach(function(lp) {
+    var pd  = pm[lp.g];
+    var col = lp.sp || (pd ? MC[pd.mode] : '#444');
+    var x   = CX_32[lp.s];
+    var y   = py32(lp.row);
+    var grp = makePad(ns, lp, pd, col, x, y, CX_32, PE_32, LX_32, py32);
+    svg.appendChild(grp);
+  });
+}
+
+// ── ESP32-S3 Board rendern (2 Spalten) ───────────────────────
+var renderBoardS3 = function(svg, pm, ns) {
+  LY_S3.forEach(function(lp) {
+    var pd  = pm[lp.g];
+    // RGB-LED bekommt Regenbogenfarbe
+    var col = lp.rgb ? '#e74c3c' : (lp.sp || (pd ? MC[pd.mode] : '#444'));
+    var x   = (lp.s === 'L') ? CX_S3L : CX_S3R;
+    var y   = pyS3(lp.row);
+    var isL = (lp.s === 'L');
+    var lxObj = {x: isL ? x-14 : x+14, a: isL ? 'end' : 'start'};
+    var cxMap = {L:CX_S3L, R:CX_S3R};
+    var peMap = {L:290, R:710};
+    var lxMap = {L:{x:CX_S3L-14,a:'end'}, R:{x:CX_S3R+14,a:'start'}};
+    var grp = makePad(ns, lp, pd, col, x, y, cxMap, peMap, lxMap, pyS3);
+    svg.appendChild(grp);
+  });
+}
+
+// ── Gemeinsame Pad-Erstellung ─────────────────────────────────
+var makePad = function(ns, lp, pd, col, x, y, cxMap, peMap, lxMap, pyFn) {
+    var grp = document.createElementNS(ns, 'g');
+    grp.classList.add('dyn');
+    if (lp.g > 0 && !lp.sp) {
+      grp.style.cursor = 'pointer';
+      grp.onclick = (function(gp){ return function() {
+        showTab('gpio', document.querySelectorAll('.tab')[1]);
+        setTimeout(function(){ var r=document.getElementById('r'+gp); if(r) r.scrollIntoView({behavior:'smooth',block:'center'}); }, 200);
+      };})(lp.g);
+    }
+    // Verbindungslinie
+    var ln = document.createElementNS(ns, 'line');
+    ln.setAttribute('x1', x); ln.setAttribute('y1', y);
+    ln.setAttribute('x2', peMap[lp.s]); ln.setAttribute('y2', y);
+    ln.setAttribute('stroke', col); ln.setAttribute('stroke-width', '1.2'); ln.setAttribute('opacity', '0.35');
+    grp.appendChild(ln);
+    // Pad
+    var pad = document.createElementNS(ns, 'rect');
+    pad.setAttribute('x', x-5); pad.setAttribute('y', y-5);
+    pad.setAttribute('width', '10'); pad.setAttribute('height', '10');
+    pad.setAttribute('rx', '2'); pad.setAttribute('fill', col);
+    pad.setAttribute('stroke', '#000'); pad.setAttribute('stroke-width', '0.8');
+    if (!lp.sp) pad.classList.add('pc');
+    grp.appendChild(pad);
+    // Bohrung
+    var hole = document.createElementNS(ns, 'circle');
+    hole.setAttribute('cx', x); hole.setAttribute('cy', y);
+    hole.setAttribute('r', '2'); hole.setAttribute('fill', '#0d1117');
+    grp.appendChild(hole);
+    // Zustandsring
+    if (pd && (pd.mode===1||pd.mode===2||pd.mode===3)) {
+      var ring = document.createElementNS(ns, 'circle');
+      ring.setAttribute('cx', x); ring.setAttribute('cy', y);
+      ring.setAttribute('r', '4.5'); ring.setAttribute('fill', 'none');
+      ring.setAttribute('stroke', pd.value ? '#3fb950' : '#555');
+      ring.setAttribute('stroke-width', '1.2');
+      grp.appendChild(ring);
+    }
+    // Label
+    var tx = document.createElementNS(ns, 'text');
+    tx.setAttribute('x', lxMap[lp.s].x); tx.setAttribute('y', y+3);
+    tx.setAttribute('text-anchor', lxMap[lp.s].a);
+    var lc = lp.rgb ? '#f55' : (lp.sp ? (lp.sp==='#5d2e2e'?'#a55':'#888') : (pd && pd.mode > 0 ? MC[pd.mode] : '#888'));
+    tx.setAttribute('fill', lc); tx.setAttribute('font-size', '8.5'); tx.setAttribute('font-family', 'monospace');
+    var vs = '';
+    if (pd && (pd.mode===1||pd.mode===2||pd.mode===3)) vs = pd.value ? '=H' : '=L';
+    else if (pd && pd.mode===5) vs = '=' + pd.value;
+    else if (pd && (pd.mode===4||pd.mode===13)) vs = '~';
+    tx.textContent = lp.lb + vs;
+    grp.appendChild(tx);
+    return grp;
+}
+
+// ── Helper: Wert + Aktion fuer eine Zeile ─────────────────────
+var fmtAdc = function(p) {
+  if (UNIT_MODE === 'volt') {
+    var v = (typeof p.mV === 'number') ? (p.mV/1000) : (p.value/4095*3.3);
+    return v.toFixed(3)+' V';
+  }
+  return p.value+' raw'+(typeof p.mV==='number'?' ('+(p.mV/1000).toFixed(2)+'V)':'');
+};
+var fmtDac = function(p) {
+  if (UNIT_MODE === 'volt') {
+    var v = (typeof p.mV === 'number') ? (p.mV/1000) : (p.value/255*3.3);
+    return v.toFixed(3)+' V';
+  }
+  return p.value+'/255';
+};
+var rowVA = function(p) {
+  var vs = '—', vc = '', act = '';
+  if (p.mode===1||p.mode===2||p.mode===3) { vs=p.value?'HIGH':'LOW'; vc=p.value?'vhi':'vlo'; }
+  else if (p.mode===4)  { vs=p.pwmDuty+'/255 @ '+p.pwmFreq+'Hz'; vc='vadc'; }
+  else if (p.mode===5)  { vs=fmtAdc(p)+(p.adc2?' \u26a0 ADC2':''); vc=p.adc2?'vwarn':'vadc'; }
+  else if (p.mode===6)  { vs=fmtDac(p)+' DAC'; vc='vadc'; }
+  else if (p.mode===13) { vs='CLK '+p.pwmFreq+'Hz'; vc='vadc'; }
+  else if (p.mode===14) { vs='RGB-LED'; vc='vadc'; }
+  else if (p.mode===15) { vs=p.value+' cnt @ '+(p.countHz||0)+' Hz'; vc='vadc'; }
+  else if (p.mode>=7 && p.mode<=12) { vs=MN[p.mode]; vc='vadc'; }
+  if (p.mode===3)  act='<button class="btn btn-sm btn-g" onclick="pinToggle('+p.gpio+')">'+(p.value?'\u25cf HI':'\u25cb LO')+'</button>';
+  else if (p.mode===4)  act='<input type=range min=0 max=255 value='+p.pwmDuty+' style="width:80px;accent-color:#e67e22" oninput="pinPwmDuty('+p.gpio+',this.value)">';
+  else if (p.mode===6)  {
+    if (UNIT_MODE==='volt') {
+      act='<input type=number min=0 max=3.3 step=0.01 value='+((p.mV||0)/1000).toFixed(2)+' style="width:70px;font-size:11px" onchange="pinDacVolts('+p.gpio+',this.value)"> V';
+    } else {
+      act='<input type=range min=0 max=255 value='+p.value+' style="width:80px;accent-color:#8e44ad" oninput="pinDac('+p.gpio+',this.value)">';
+    }
+  }
+  else if (p.mode===5)  act='<button class="btn btn-sm" onclick="pinRead('+p.gpio+')">Lesen</button>';
+  else if (p.mode===13) act='<input type=number value='+p.pwmFreq+' min=1 max=40000000 style="width:90px;font-size:11px" onchange="pinClockFreq('+p.gpio+',this.value)"> Hz';
+  else if (p.mode===14) act='<button class="btn btn-sm" style="background:#e91e8c;color:#fff" onclick="showTab(\'rgb\',document.getElementById(\'rgb-tab\'))">RGB-Tab</button>';
+  else if (p.mode===15) act='<button class="btn btn-sm" onclick="countReset('+p.gpio+')">Reset</button> <button class="btn btn-sm btn-b" onclick="countPulse('+p.gpio+',10)">+10</button>';
+  return {vs:vs, vc:vc, act:act};
+}
+
+var setUnitMode = function(mode) {
+  UNIT_MODE = mode;
+  localStorage.setItem('ioc_unit', mode);
+  document.querySelectorAll('.seg button').forEach(function(b){
+    b.classList.toggle('on', b.getAttribute('data-u')===mode);
+  });
+  renderGpio();
+};
+
+// ── GPIO Tabelle: Rebuild (nur bei Tab-Wechsel) ────────────────
+var renderGpio = function() {
+  var tb = document.getElementById('gtb');
+  if (!PD.length) { tb.innerHTML='<tr><td colspan=5 style=color:#555;text-align:center>Lade...</td></tr>'; return; }
+  var h = '';
+  PD.forEach(function(p) {
+    var va = rowVA(p);
+    var opts = '';
+    for (var m=0; m<MN.length; m++) {
+      if (p.inputOnly && (m===3||m===4||m===6||m===13||m===14||(m>=7&&m<=12))) continue;
+      if (!p.hasADC && m===5) continue;
+      if (!p.hasDAC && m===6) continue;
+      if (!p.hasPWM && (m===4||m===13)) continue;
+      opts += '<option value='+m+(p.mode===m?' selected':'')+'>'+MN[m]+'</option>';
+    }
+    var warn = p.restricted ? ' <span class="vwarn" title="Geschuetzter Pin">!</span>' : '';
+    h += '<tr id="r'+p.gpio+'">';
+    h += '<td class="mono">'+p.gpio+warn+'</td>';
+    h += '<td style="font-size:11px;color:#8b949e">'+p.label+'</td>';
+    h += '<td><select data-gpio='+p.gpio+' style="font-size:11px" onchange="pinModeChange(this)">'+opts+'</select></td>';
+    h += '<td class="'+va.vc+'" id="val-'+p.gpio+'">'+va.vs+'</td>';
+    h += '<td id="act-'+p.gpio+'">'+va.act+'</td></tr>';
+  });
+  tb.innerHTML = h;
+}
+
+// ── Nur Wert+Aktion einer Zeile aktualisieren ─────────────────
+var updateOneRow = function(gpio) {
+  var p = PD.find(x => x.gpio === gpio);
+  if (!p) return;
+  var va = rowVA(p);
+  var vc = document.getElementById('val-'+gpio);
+  var ac = document.getElementById('act-'+gpio);
+  if (vc) { vc.className=va.vc; vc.innerHTML=va.vs; }
+  if (ac) { ac.innerHTML=va.act; }
+}
+
+// ── Alle Werte aktualisieren (vom SSE-Event) ──────────────────
+var updateGpioValues = function() {
+  PD.forEach(function(p) {
+    var sel = document.querySelector('select[data-gpio="'+p.gpio+'"]');
+    if (sel && document.activeElement===sel) return;
+    var vc = document.getElementById('val-'+p.gpio);
+    if (!vc) return;
+    var va = rowVA(p);
+    vc.className = va.vc; vc.innerHTML = va.vs;
+    if (p.mode===4) { var sl=document.querySelector('#act-'+p.gpio+' input[type=range]'); if(sl) sl.value=p.pwmDuty; }
+    if (p.mode===3) { var btn=document.querySelector('#act-'+p.gpio+' button'); if(btn) btn.innerHTML=p.value?'&#9679; HI':'&#9675; LO'; }
+  });
+}
+
+// ── SSE Verbindung ────────────────────────────────────────────
+var es;
+var connectSSE = function() {
+  es = new EventSource('/api/events');
+  es.addEventListener('pins', function(e) {
+    PD = JSON.parse(e.data);
+    document.getElementById('hbb').textContent = '✅';
+    var pn = document.querySelector('.pane.active');
+    if (pn && pn.id === 'pane-board') renderBoard();
+    if (pn && pn.id === 'pane-gpio')  updateGpioValues();
+  });
+  es.onerror = function() {
+    document.getElementById('hbb').textContent = '❌';
+    es.close();
+    setTimeout(connectSSE, 3000);
+  };
+}
+// Init (connectSSE/fetchStatus) erst am Dateiende — nach allen Funktionsdefinitionen
+
+// ── Modus-Aenderung ───────────────────────────────────────────
+var isDriveMode = function(mode) {
+  return mode===3||mode===4||mode===6||mode===13||mode===14||(mode>=7&&mode<=12);
+};
+var pinModeChange = function(sel) {
+  var gpio = parseInt(sel.getAttribute('data-gpio'));
+  var mode = parseInt(sel.value);
+  var p = PD.find(x => x.gpio === gpio);
+  var force = false;
+  if (p && p.restricted && isDriveMode(mode)) {
+    if (!confirm('GPIO '+gpio+' ist geschuetzt (BOOT/USB/UART). Wirklich auf '+MN[mode]+' setzen?')) {
+      if (p) sel.value = String(p.mode);
+      return;
+    }
+    force = true;
+  }
+  if (p) p.mode = mode;
+  updateOneRow(gpio);
+  fetch('/api/pin-set', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({gpio:gpio, mode:mode, force:force})})
+  .then(r => r.json())
+  .then(d => {
+    if (!d.ok) {
+      alert(d.err === 'restricted' ? 'Pin geschuetzt — Bestaetigung noetig.' : ('Fehler: '+(d.err||'unknown')));
+      fetch('/api/pins').then(r=>r.json()).then(d2=>{PD=d2;renderGpio();});
+    }
+  });
+}
+
+var pinToggle = function(gpio) {
+  var p = PD.find(x => x.gpio === gpio);
+  if (!p) return;
+  var force = false;
+  if (p.restricted) {
+    if (!confirm('GPIO '+gpio+' ist geschuetzt. Trotzdem schreiben?')) return;
+    force = true;
+  }
+  p.value = p.value ? 0 : 1;
+  updateOneRow(gpio);
+  fetch('/api/pin-write', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({gpio:gpio, value:p.value, force:force})});
+}
+var pinPwmDuty = function(gpio, duty) {
+  var p = PD.find(x => x.gpio===gpio); if(p) p.pwmDuty=parseInt(duty);
+  fetch('/api/pin-write', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({gpio:gpio, value:parseInt(duty)})});
+}
+var pinClockFreq = function(gpio, freq) {
+  var p = PD.find(x => x.gpio===gpio); if(p) p.pwmFreq=parseInt(freq)||1000;
+  updateOneRow(gpio);
+  fetch('/api/pin-set', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({gpio:gpio, mode:13, freq:parseInt(freq)||1000, force:!!(p&&p.restricted)})});
+}
+var pinDac = function(gpio, val) {
+  var p = PD.find(x => x.gpio===gpio);
+  if (p) { p.value=parseInt(val); p.mV=Math.round(parseInt(val)/255*3300); }
+  fetch('/api/pin-write', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({gpio:gpio, value:parseInt(val)})});
+}
+var pinDacVolts = function(gpio, volts) {
+  var v = parseFloat(volts); if (isNaN(v)) return;
+  var raw = Math.round(Math.max(0, Math.min(3.3, v)) / 3.3 * 255);
+  var p = PD.find(x => x.gpio===gpio);
+  if (p) { p.value=raw; p.mV=Math.round(v*1000); }
+  updateOneRow(gpio);
+  fetch('/api/pin-write', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({gpio:gpio, volts:v})});
+}
+var pinRead = function(gpio) {
+  fetch('/api/pin-read?gpio='+gpio).then(r=>r.json()).then(d => {
+    var p = PD.find(x => x.gpio===gpio);
+    if (p) { p.value=d.value; p.mV=d.mV||0; }
+    updateOneRow(gpio);
+  });
+}
+var countReset = function(gpio) {
+  fetch('/api/count-reset',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({gpio:gpio})})
+  .then(r=>r.json()).then(function(d){
+    var p=PD.find(x=>x.gpio===gpio); if(p){p.value=0;p.countHz=0;}
+    updateOneRow(gpio);
+  });
+}
+var countPulse = function(gpio, n) {
+  var p=PD.find(x=>x.gpio===gpio);
+  var force=!!(p&&p.restricted);
+  if (force && !confirm('GPIO '+gpio+' geschuetzt. Testpulse senden?')) return;
+  fetch('/api/count-pulse',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({gpio:gpio,n:n||10,force:force})})
+  .then(r=>r.json()).then(function(d){
+    if (!d.ok) { alert('Count-Pulse: '+(d.err||'Fehler')); return; }
+    var pp=PD.find(x=>x.gpio===gpio); if(pp) pp.value=d.after;
+    updateOneRow(gpio);
+  });
+}
+
+// ── Scope ─────────────────────────────────────────────────────
+var renderScope = function() {
+  var sel=document.getElementById('sc-gpio');
+  if (!sel) return;
+  var cur=sel.value;
+  sel.innerHTML='';
+  PD.forEach(function(p){
+    if (!p.hasADC) return;
+    var o=document.createElement('option');
+    o.value=p.gpio;
+    o.text='GPIO '+p.gpio+' ('+p.label+')'+(p.adc2?' ADC2':'');
+    sel.appendChild(o);
+  });
+  if (cur) sel.value=cur;
+}
+var scopeCapture = function() {
+  var gpio=parseInt(document.getElementById('sc-gpio').value);
+  var samples=parseInt(document.getElementById('sc-n').value)||200;
+  var rate=parseInt(document.getElementById('sc-rate').value)||5000;
+  document.getElementById('sc-info').textContent='Abtasten...';
+  fetch('/api/scope?gpio='+gpio+'&samples='+samples+'&rate='+rate)
+  .then(r=>r.json()).then(function(d){
+    if (!d.ok) { document.getElementById('sc-info').textContent='Fehler: '+(d.err||'?'); return; }
+    document.getElementById('sc-info').textContent=
+      'GPIO '+d.gpio+' · '+d.samples+' Samples @ '+d.rate+' Hz · min='+d.min+' max='+d.max+' avg='+d.avg;
+    drawScope(d.data, d.min, d.max);
+  }).catch(function(){ document.getElementById('sc-info').textContent='Fehler'; });
+}
+var drawScope = function(data, vmin, vmax) {
+  var c=document.getElementById('sc-canvas');
+  if (!c || !data || !data.length) return;
+  var ctx=c.getContext('2d');
+  var w=c.width, h=c.height;
+  ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle='#21262d';
+  for (var i=1;i<4;i++){ ctx.beginPath(); ctx.moveTo(0,h*i/4); ctx.lineTo(w,h*i/4); ctx.stroke(); }
+  var span=Math.max(1, vmax-vmin);
+  ctx.strokeStyle='#58a6ff'; ctx.lineWidth=1.5; ctx.beginPath();
+  for (var i=0;i<data.length;i++){
+    var x=i/(data.length-1)*w;
+    var y=h - ((data[i]-vmin)/span)*h*0.9 - h*0.05;
+    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  ctx.fillStyle='#8b949e'; ctx.font='11px monospace';
+  ctx.fillText(String(vmax), 4, 12);
+  ctx.fillText(String(vmin), 4, h-4);
+}
+
+// ── Taktgenerator ─────────────────────────────────────────────
+var renderClock = function() {
+  var sel=document.getElementById('ck-gpio');
+  if (!sel) return;
+  var cur=sel.value;
+  sel.innerHTML='';
+  PD.forEach(function(p){
+    if (!p.hasPWM || p.inputOnly) return;
+    var o=document.createElement('option');
+    o.value=p.gpio;
+    o.text='GPIO '+p.gpio+' ('+p.label+')'+(p.mode===13?' CLK':'')+(p.restricted?' !':'');
+    sel.appendChild(o);
+  });
+  if (cur) sel.value=cur;
+  var lst=document.getElementById('ck-list');
+  var act=PD.filter(function(p){return p.mode===13;});
+  if (!act.length) { lst.innerHTML='<span style=color:#555>Kein aktiver Takt</span>'; return; }
+  lst.innerHTML=act.map(function(p){
+    return '<div style="margin-bottom:6px"><span class=mono>GPIO '+p.gpio+'</span> · '+p.pwmFreq+' Hz (50% Duty)</div>';
+  }).join('');
+}
+var clockStart = function() {
+  var gpio=parseInt(document.getElementById('ck-gpio').value);
+  var freq=parseInt(document.getElementById('ck-fr').value)||1000;
+  if (freq < 1) freq=1;
+  if (freq > 40000000) freq=40000000;
+  var p=PD.find(function(x){return x.gpio===gpio;});
+  var force=false;
+  if (p && p.restricted) {
+    if (!confirm('GPIO '+gpio+' geschuetzt. Takt starten?')) return;
+    force=true;
+  }
+  if (p){p.mode=13;p.pwmFreq=freq;}
+  fetch('/api/pin-set',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({gpio:gpio,mode:13,freq:freq,force:force})})
+  .then(function(r){return r.json();}).then(function(d){
+    document.getElementById('ck-res').textContent=d.ok
+      ? ('Takt GPIO '+gpio+' @ '+freq+' Hz'+(freq<50?' (Software)':' (LEDC)'))
+      : ('Fehler: '+(d.err||'?'));
+    renderClock();
+  });
+}
+var clockStop = function() {
+  var gpio=parseInt(document.getElementById('ck-gpio').value);
+  fetch('/api/pin-set',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({gpio:gpio,mode:0})})
+  .then(function(){ document.getElementById('ck-res').textContent='GPIO '+gpio+' gestoppt'; renderClock(); });
+}
+
+// ── Digital Multimeter ────────────────────────────────────────
+var dmmTimer=null;
+var renderDmm = function() {
+  dmmFillPins();
+  dmmApplyMethodFilter();
+}
+var dmmFillPins = function() {
+  var method=(document.getElementById('dmm-method')||{}).value||'volt';
+  var sel=document.getElementById('dmm-gpio');
+  if (!sel) return;
+  var cur=sel.value;
+  sel.innerHTML='';
+  PD.forEach(function(p){
+    if (method==='volt' && !p.hasADC) return;
+    var o=document.createElement('option');
+    o.value=p.gpio;
+    o.text='GPIO '+p.gpio+' ('+p.label+')'+(p.adc2?' ADC2':'')+(p.restricted?' !':'');
+    sel.appendChild(o);
+  });
+  if (cur) sel.value=cur;
+}
+var dmmApplyMethodFilter = function() {
+  dmmFillPins();
+  var hint={
+    volt:'ADC-Spannung 0–3.3 V (Mittelwert aus 24 Samples). ADC1 bevorzugen.',
+    logic:'Digitalpegel mit internem Pull-up (HIGH/LOW).',
+    freq:'Frequenz/Period/Duty via pulseIn (Rechtecksignal noetig).',
+    period:'Periodendauer High+Low (pulseIn).',
+    duty:'Tastgrad in % (pulseIn).',
+    count:'Flanken/s — 1 s Messfenster (Interrupt COUNT).'
+  };
+  var m=document.getElementById('dmm-method').value;
+  document.getElementById('dmm-hint').textContent=hint[m]||'';
+}
+var dmmReadOnce = function() {
+  var gpio=parseInt(document.getElementById('dmm-gpio').value);
+  var method=document.getElementById('dmm-method').value;
+  document.getElementById('dmm-main').textContent='…';
+  fetch('/api/dmm?gpio='+gpio+'&method='+method)
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if (!d.ok) {
+      document.getElementById('dmm-main').textContent='—';
+      document.getElementById('dmm-sub').textContent=d.err==='no_signal'?'Kein Signal':('Fehler: '+(d.err||'?'));
+      return;
+    }
+    if (d.method==='volt') {
+      document.getElementById('dmm-main').textContent=d.avgVolts.toFixed(3)+' V';
+      document.getElementById('dmm-sub').textContent=
+        'raw avg '+d.avgRaw+' · last '+d.mV+' mV · min/max raw '+d.minRaw+'/'+d.maxRaw+(d.adc2?' · ADC2!':'');
+    } else if (d.method==='logic') {
+      document.getElementById('dmm-main').textContent=d.label;
+      document.getElementById('dmm-sub').textContent='level='+d.level;
+    } else if (d.method==='count') {
+      document.getElementById('dmm-main').textContent=d.freqHz+' Hz';
+      document.getElementById('dmm-sub').textContent='count='+d.count+(d.windowMs?' / '+d.windowMs+' ms':'');
+    } else {
+      document.getElementById('dmm-main').textContent=
+        (d.method==='duty') ? (d.dutyPct.toFixed(1)+' %') :
+        (d.method==='period') ? (d.periodUs+' µs') :
+        (d.freqHz.toFixed(2)+' Hz');
+      document.getElementById('dmm-sub').textContent=
+        'T='+d.periodUs+' µs · High '+d.highUs+' · Low '+d.lowUs+' · Duty '+d.dutyPct+'% · f='+d.freqHz+' Hz';
+    }
+  }).catch(function(){
+    document.getElementById('dmm-main').textContent='—';
+    document.getElementById('dmm-sub').textContent='Fehler';
+  });
+}
+var dmmHold = function(on) {
+  if (dmmTimer) { clearInterval(dmmTimer); dmmTimer=null; }
+  var btn=document.getElementById('dmm-hold');
+  if (on) {
+    dmmReadOnce();
+    dmmTimer=setInterval(dmmReadOnce, 500);
+    if (btn) btn.textContent='Hold stoppen';
+  } else {
+    if (btn) btn.textContent='Hold (0.5s)';
+  }
+}
+var dmmToggleHold = function() {
+  if (dmmTimer) dmmHold(false); else dmmHold(true);
+}
+
+// ── PWM Tab ───────────────────────────────────────────────────
+var renderPwm = function() {
+  var sel = document.getElementById('pwm-gpio');
+  sel.innerHTML = '';
+  PD.forEach(function(p) {
+    if (p.hasPWM && !p.inputOnly) {
+      var o = document.createElement('option');
+      o.value = p.gpio;
+      o.text = 'GPIO '+p.gpio+' ('+p.label+')'+(p.mode===4?' PWM':p.mode===13?' CLK':'');
+      sel.appendChild(o);
+    }
+  });
+  var lst = document.getElementById('pwm-list');
+  var act = PD.filter(p => p.mode===4);
+  if (!act.length) { lst.innerHTML='<span style=color:#555>Keine aktiven PWM-Pins</span>'; return; }
+  lst.innerHTML = act.map(function(p) {
+    return '<div style="margin-bottom:6px;display:flex;gap:8px;align-items:center">'
+      +'<span class=mono>GPIO '+p.gpio+'</span>'
+      +'<span style=color:#8b949e>'+p.pwmFreq+'Hz</span>'
+      +'<input type=range min=0 max=255 value='+p.pwmDuty+' style="width:100px;accent-color:#e67e22" oninput="pinPwmDuty('+p.gpio+',this.value)"> '+p.pwmDuty+'/255'
+      +'</div>';
+  }).join('');
+}
+var setPwm = function() {
+  var gpio=parseInt(document.getElementById('pwm-gpio').value);
+  var freq=parseInt(document.getElementById('pwm-fr').value)||1000;
+  var duty=parseInt(document.getElementById('pwm-dn').value);
+  var p=PD.find(x=>x.gpio===gpio); if(p){p.mode=4;p.pwmFreq=freq;p.pwmDuty=duty;}
+  fetch('/api/pin-set',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({gpio:gpio,mode:4,freq:freq,duty:duty})})
+  .then(()=>document.getElementById('pwm-res').textContent='GPIO '+gpio+' @ '+freq+'Hz Duty='+duty+'/255');
+}
+var stopPwm = function() {
+  var gpio=parseInt(document.getElementById('pwm-gpio').value);
+  var p=PD.find(x=>x.gpio===gpio); if(p) p.mode=0;
+  fetch('/api/pin-set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({gpio:gpio,mode:0})})
+  .then(()=>document.getElementById('pwm-res').textContent='GPIO '+gpio+' gestoppt');
+}
+
+// ── I2C ───────────────────────────────────────────────────────
+var i2cInit = function() {
+  var sda=parseInt(document.getElementById('i2c-sda').value);
+  var scl=parseInt(document.getElementById('i2c-scl').value);
+  fetch('/api/i2c-init',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sda:sda,scl:scl})})
+  .then(r=>r.json()).then(d=>document.getElementById('i2c-sr').textContent=d.ok?'OK: SDA=GPIO'+sda+', SCL=GPIO'+scl:'Fehler');
+}
+var i2cScan = function() {
+  document.getElementById('i2c-sr').textContent='Scanne...';
+  fetch('/api/i2c-scan').then(r=>r.json()).then(function(d) {
+    if (!d.length) { document.getElementById('i2c-sr').textContent='Keine Geraete'; return; }
+    document.getElementById('i2c-sr').innerHTML=d.map(x=>x.hex+(x.name?' — <b style=color:#58a6ff>'+x.name+'</b>':'')).join('<br>');
+  });
+}
+var i2cWrite = function() {
+  var addr=parseInt(document.getElementById('i2c-wa').value);
+  var data=document.getElementById('i2c-wd').value.trim();
+  fetch('/api/i2c-write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({addr:addr,hex:data})})
+  .then(r=>r.json()).then(d=>document.getElementById('i2c-wres').textContent=d.result);
+}
+var i2cRead = function() {
+  var addr=parseInt(document.getElementById('i2c-ra').value);
+  var reg=parseInt(document.getElementById('i2c-rr').value);
+  var len=parseInt(document.getElementById('i2c-rl').value);
+  fetch('/api/i2c-read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({addr:addr,reg:reg,len:len})})
+  .then(r=>r.json()).then(d=>{
+    var hx=d.data.map(b=>b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+    document.getElementById('i2c-rres').textContent='HEX: '+hx+'\nDEC: '+d.data.join(', ');
+  });
+}
+
+// ── SPI ───────────────────────────────────────────────────────
+var spiInit = function() {
+  var b={mosi:parseInt(document.getElementById('spi-mo').value),
+         miso:parseInt(document.getElementById('spi-mi').value),
+         sck:parseInt(document.getElementById('spi-sc').value),
+         cs:parseInt(document.getElementById('spi-cs').value),
+         freq:parseInt(document.getElementById('spi-fr').value)};
+  fetch('/api/spi-init',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})
+  .then(r=>r.json()).then(d=>document.getElementById('spi-st').textContent=d.ok?'SPI bereit':'Fehler');
+}
+var spiXfer = function() {
+  var hex=document.getElementById('spi-tx').value.trim();
+  var cs=parseInt(document.getElementById('spi-co').value);
+  fetch('/api/spi-xfer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cs:cs,hex:hex})})
+  .then(r=>r.json()).then(d=>{
+    var hx=d.rx.map(b=>b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+    document.getElementById('spi-res').textContent='RX HEX: '+hx+'\nRX DEC: '+d.rx.join(', ');
+  });
+}
+
+// ── Status ────────────────────────────────────────────────────
+var applyBusDefaults = function(d) {
+  if (typeof d.i2cSda === 'number') BUS.i2cSda = d.i2cSda;
+  if (typeof d.i2cScl === 'number') BUS.i2cScl = d.i2cScl;
+  if (typeof d.spiMosi === 'number') BUS.spiMosi = d.spiMosi;
+  if (typeof d.spiMiso === 'number') BUS.spiMiso = d.spiMiso;
+  if (typeof d.spiSck === 'number') BUS.spiSck = d.spiSck;
+  if (typeof d.spiCs === 'number') BUS.spiCs = d.spiCs;
+  var el;
+  el=document.getElementById('i2c-sda'); if(el && !el.dataset.touched) el.value=BUS.i2cSda;
+  el=document.getElementById('i2c-scl'); if(el && !el.dataset.touched) el.value=BUS.i2cScl;
+  el=document.getElementById('spi-mo'); if(el && !el.dataset.touched) el.value=BUS.spiMosi;
+  el=document.getElementById('spi-mi'); if(el && !el.dataset.touched) el.value=BUS.spiMiso;
+  el=document.getElementById('spi-sc'); if(el && !el.dataset.touched) el.value=BUS.spiSck;
+  el=document.getElementById('spi-cs'); if(el && !el.dataset.touched) el.value=BUS.spiCs;
+};
+['i2c-sda','i2c-scl','spi-mo','spi-mi','spi-sc','spi-cs'].forEach(function(id){
+  var el=document.getElementById(id);
+  if (el) el.addEventListener('change', function(){ this.dataset.touched='1'; });
+});
+
+var fetchStatus = function() {
+  fetch('/api/status').then(r=>r.json()).then(d=>{
+    applyBusDefaults(d);
+    // Board-Typ setzen und SVG anpassen
+    if (d.boardType && d.boardType !== BOARD) {
+      BOARD = d.boardType;
+      RGB_GPIO = d.rgbLed || -1;
+      // RGB-Tab anzeigen wenn Board eine RGB-LED hat
+      var rgbTab = document.getElementById('rgb-tab');
+      if (rgbTab) rgbTab.style.display = (RGB_GPIO >= 0) ? '' : 'none';
+      // Board-Titel aktualisieren
+      var bt = document.getElementById('board-title');
+      if (bt) bt.innerHTML = BOARD === 'esp32s3'
+        ? 'ESP32-S3 Dev Module — Pinout'
+        : 'Wemos D1 Mini ESP32 — Pinout';
+      var svg = document.getElementById('bsvg');
+      svg.setAttribute('viewBox', BOARD === 'esp32s3' ? VB_S3 : VB_32);
+      // S3 PCB-Inhalt tauschen
+      var pcb = document.getElementById('svgPCB');
+      if (pcb) pcb.innerHTML = BOARD === 'esp32s3' ? SVG_S3_INNER : SVG_32_INNER;
+      renderBoard();
+    }
+    document.getElementById('st-ip').textContent=d.ip;
+    document.getElementById('st-mdns').innerHTML='<a href="http://'+d.mdns+'/" style=color:#58a6ff>'+d.mdns+'</a>';
+    document.getElementById('st-rs').textContent=d.rssi+' dBm';
+    document.getElementById('st-up').textContent=fmtU(d.uptime);
+    document.getElementById('st-hp').textContent=Math.round(d.freeHeap/1024)+' KB';
+    document.getElementById('st-fl').textContent=Math.round(d.freeSketch/1024)+' KB';
+    document.getElementById('st-i2').textContent=d.i2cReady?'Initialisiert':'—';
+    document.getElementById('st-sp').textContent=d.spiReady?'Initialisiert':'—';
+  });
+}
+// ── RGB-LED ───────────────────────────────────────────────────
+var rgbPreview = function() {
+  var r=parseInt(document.getElementById('rgb-r').value);
+  var g=parseInt(document.getElementById('rgb-g').value);
+  var b=parseInt(document.getElementById('rgb-b').value);
+  document.getElementById('rgb-prev').style.background='rgb('+r+','+g+','+b+')';
+}
+var rgbSet = function(r,g,b) {
+  document.getElementById('rgb-r').value=r; document.getElementById('rv').textContent=r;
+  document.getElementById('rgb-g').value=g; document.getElementById('gv').textContent=g;
+  document.getElementById('rgb-b').value=b; document.getElementById('bv').textContent=b;
+  rgbPreview(); rgbSend();
+}
+var rgbOff = function() { rgbSet(0,0,0); }
+var rgbSend = function() {
+  var r=parseInt(document.getElementById('rgb-r').value);
+  var g=parseInt(document.getElementById('rgb-g').value);
+  var b=parseInt(document.getElementById('rgb-b').value);
+  fetch('/api/rgb',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({r:r,g:g,b:b})})
+  .then(res=>res.json())
+  .then(d=>{document.getElementById('rgb-res').textContent=d.ok?'OK: R='+r+' G='+g+' B='+b:'Fehler';})
+  .catch(()=>document.getElementById('rgb-res').textContent='Fehler');
+}
+
+var fmtU = function(s){if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'min '+s%60+'s';return Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'min';}
+
+// ── Init nach allen Definitionen ──────────────────────────────
+connectSSE();
+fetchStatus();
+document.querySelectorAll('.seg button').forEach(function(b){
+  b.classList.toggle('on', b.getAttribute('data-u')===UNIT_MODE);
+});
+
+</script></body></html>
